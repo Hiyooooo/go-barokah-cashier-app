@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../printing/receipt_print_service.dart';
 import '../providers/receipt_provider.dart';
 import '../../data/models/receipt_models.dart';
 
@@ -14,7 +16,20 @@ class ReceiptPage extends ConsumerWidget {
     final receipt = ref.watch(receiptProvider(saleNumber));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Receipt')),
+      appBar: AppBar(
+        title: const Text('Receipt'),
+        actions: [
+          receipt.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
+            data: (value) => IconButton(
+              tooltip: 'Print receipt',
+              icon: const Icon(Icons.print_outlined),
+              onPressed: () => _print(context, value),
+            ),
+          ),
+        ],
+      ),
       body: receipt.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => Center(
@@ -30,16 +45,48 @@ class ReceiptPage extends ConsumerWidget {
             ],
           ),
         ),
-        data: (value) => _ReceiptPreview(receipt: value),
+        data: (value) => _ReceiptPreview(
+          receipt: value,
+          onPrint: () => _print(context, value),
+          onPreview: () => context.push('/receipt/$saleNumber/print'),
+        ),
       ),
     );
+  }
+
+  Future<void> _print(BuildContext context, Receipt receipt) async {
+    try {
+      await ReceiptPrintService().print(receipt);
+    } on ReceiptPrintException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Printing failed. The transaction is still successful.',
+            ),
+          ),
+        );
+      }
+    }
   }
 }
 
 class _ReceiptPreview extends StatelessWidget {
-  const _ReceiptPreview({required this.receipt});
+  const _ReceiptPreview({
+    required this.receipt,
+    required this.onPrint,
+    required this.onPreview,
+  });
 
   final Receipt receipt;
+  final VoidCallback onPrint;
+  final VoidCallback onPreview;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -72,6 +119,17 @@ class _ReceiptPreview extends StatelessWidget {
         const SizedBox(height: 16),
         Text('Notes: ${receipt.notes}'),
       ],
+      const SizedBox(height: 20),
+      FilledButton.icon(
+        onPressed: onPrint,
+        icon: const Icon(Icons.print),
+        label: const Text('Print receipt'),
+      ),
+      OutlinedButton.icon(
+        onPressed: onPreview,
+        icon: const Icon(Icons.preview),
+        label: const Text('Open print preview'),
+      ),
     ],
   );
 }

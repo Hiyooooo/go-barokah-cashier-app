@@ -9,6 +9,7 @@ import '../features/checkout/presentation/pages/checkout_page.dart';
 import '../features/products/presentation/pages/product_detail_page.dart';
 import '../features/products/presentation/pages/products_page.dart';
 import '../features/receipt/presentation/pages/receipt_page.dart';
+import '../features/receipt/presentation/pages/receipt_print_preview_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authProvider);
@@ -43,6 +44,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/receipt/:saleNumber',
         builder: (_, state) =>
             ReceiptPage(saleNumber: state.pathParameters['saleNumber']!),
+      ),
+      GoRoute(
+        path: '/receipt/:saleNumber/print',
+        builder: (_, state) => ReceiptPrintPreviewPage(
+          saleNumber: state.pathParameters['saleNumber']!,
+        ),
       ),
       GoRoute(
         path: '/account',
