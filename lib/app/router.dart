@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
+import '../features/account/presentation/pages/account_page.dart';
 import '../features/cart/presentation/pages/cart_page.dart';
 import '../features/checkout/presentation/pages/checkout_page.dart';
 import '../features/products/presentation/pages/product_detail_page.dart';
@@ -49,24 +49,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           saleNumber: state.pathParameters['saleNumber']!,
         ),
       ),
-      GoRoute(
-        path: '/account',
-        builder: (_, _) => const _PlaceholderPage(title: 'Account'),
-      ),
+      GoRoute(path: '/account', builder: (_, _) => const AccountPage()),
     ],
   );
 });
-
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(child: Text(title)),
-    );
-  }
-}
