@@ -10,6 +10,7 @@ import '../features/products/presentation/pages/product_detail_page.dart';
 import '../features/products/presentation/pages/products_page.dart';
 import '../features/receipt/presentation/pages/receipt_page.dart';
 import '../features/receipt/presentation/pages/receipt_print_preview_page.dart';
+import '../features/sales/presentation/pages/cash_sale_history_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authProvider);
@@ -36,10 +37,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/cart', builder: (_, _) => const CartPage()),
       GoRoute(path: '/checkout', builder: (_, _) => const CheckoutPage()),
-      GoRoute(
-        path: '/sales',
-        builder: (_, _) => const _PlaceholderPage(title: 'Sales'),
-      ),
+      GoRoute(path: '/sales', builder: (_, _) => const CashSaleHistoryPage()),
       GoRoute(
         path: '/receipt/:saleNumber',
         builder: (_, state) =>
