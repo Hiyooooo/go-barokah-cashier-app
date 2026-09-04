@@ -4,6 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
+import '../features/cart/presentation/pages/cart_page.dart';
+import '../features/checkout/presentation/pages/checkout_page.dart';
+import '../features/products/presentation/pages/product_detail_page.dart';
+import '../features/products/presentation/pages/products_page.dart';
+import '../features/receipt/presentation/pages/receipt_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authProvider);
@@ -21,27 +26,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/', redirect: (_, _) => '/login'),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
+      GoRoute(path: '/products', builder: (_, _) => const ProductsPage()),
       GoRoute(
-        path: '/products',
-        builder: (_, _) => const _PlaceholderPage(title: 'Products'),
+        path: '/products/:id',
+        builder: (_, state) => ProductDetailPage(
+          productId: int.parse(state.pathParameters['id']!),
+        ),
       ),
-      GoRoute(
-        path: '/cart',
-        builder: (_, _) => const _PlaceholderPage(title: 'Cart'),
-      ),
-      GoRoute(
-        path: '/checkout',
-        builder: (_, _) => const _PlaceholderPage(title: 'Checkout'),
-      ),
+      GoRoute(path: '/cart', builder: (_, _) => const CartPage()),
+      GoRoute(path: '/checkout', builder: (_, _) => const CheckoutPage()),
       GoRoute(
         path: '/sales',
         builder: (_, _) => const _PlaceholderPage(title: 'Sales'),
       ),
       GoRoute(
         path: '/receipt/:saleNumber',
-        builder: (_, state) => _PlaceholderPage(
-          title: 'Receipt ${state.pathParameters['saleNumber']}',
-        ),
+        builder: (_, state) =>
+            ReceiptPage(saleNumber: state.pathParameters['saleNumber']!),
       ),
       GoRoute(
         path: '/account',

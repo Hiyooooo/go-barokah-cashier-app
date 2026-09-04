@@ -1,0 +1,95 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/receipt_provider.dart';
+import '../../data/models/receipt_models.dart';
+
+class ReceiptPage extends ConsumerWidget {
+  const ReceiptPage({required this.saleNumber, super.key});
+
+  final String saleNumber;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final receipt = ref.watch(receiptProvider(saleNumber));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Receipt')),
+      body: receipt.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, _) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Unable to load receipt.'),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () => ref.invalidate(receiptProvider(saleNumber)),
+                child: const Text('Try again'),
+              ),
+            ],
+          ),
+        ),
+        data: (value) => _ReceiptPreview(receipt: value),
+      ),
+    );
+  }
+}
+
+class _ReceiptPreview extends StatelessWidget {
+  const _ReceiptPreview({required this.receipt});
+
+  final Receipt receipt;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(20),
+    children: [
+      Text('Go-Barokah', style: Theme.of(context).textTheme.headlineSmall),
+      Text('Sale number: ${receipt.saleNumber}'),
+      Text('Date: ${receipt.createdAt?.toLocal() ?? '-'}'),
+      Text('Cashier: ${receipt.cashierName}'),
+      Text('Payment: ${receipt.paymentMethod}'),
+      const Divider(height: 28),
+      ...receipt.items.map(
+        (item) => ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(item.productName),
+          subtitle: Text(
+            '${item.quantity} x ${_price(item.finalUnitPrice)} '
+            '(discount ${item.discountAmount}%)',
+          ),
+          trailing: Text(_price(item.subtotal)),
+        ),
+      ),
+      const Divider(height: 28),
+      _ReceiptRow(label: 'Subtotal', value: receipt.subtotal),
+      _ReceiptRow(label: 'Total discount', value: receipt.discountTotal),
+      _ReceiptRow(label: 'Grand total', value: receipt.grandTotal),
+      _ReceiptRow(label: 'Cash received', value: receipt.cashReceived),
+      _ReceiptRow(label: 'Change', value: receipt.changeAmount),
+      if (receipt.notes?.isNotEmpty == true) ...[
+        const SizedBox(height: 16),
+        Text('Notes: ${receipt.notes}'),
+      ],
+    ],
+  );
+}
+
+class _ReceiptRow extends StatelessWidget {
+  const _ReceiptRow({required this.label, required this.value});
+
+  final String label;
+  final num value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [Text(label), Text(_price(value))],
+    ),
+  );
+}
+
+String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';
