@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/network/api_client.dart';
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../../data/models/checkout_models.dart';
 import '../../../cart/data/models/cart_models.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
@@ -47,10 +47,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: cart.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => const _Message(text: 'Unable to load cart.'),
+        loading: () => const AppLoading(),
+        error: (error, _) => AppError(
+          message: userFacingError(error, fallback: 'Unable to load cart.'),
+          onRetry: () => ref.invalidate(cartProvider),
+        ),
         data: (value) => value.items.isEmpty
-            ? const _Message(text: 'Your cart is empty.')
+            ? const AppEmpty(message: 'Your cart is empty.')
             : _CheckoutContent(
                 cart: value,
                 checkout: checkout,
@@ -136,9 +139,10 @@ class _CheckoutContent extends StatelessWidget {
           if (checkout.hasError) ...[
             const SizedBox(height: 12),
             Text(
-              checkout.error is ApiException
-                  ? (checkout.error as ApiException).message
-                  : 'Transaction failed. Please try again.',
+              userFacingError(
+                checkout.error!,
+                fallback: 'Transaction failed. Please try again.',
+              ),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],
@@ -214,15 +218,6 @@ class _SummaryRow extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Center(child: Text(text));
 }
 
 String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';

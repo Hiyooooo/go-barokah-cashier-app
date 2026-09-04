@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../data/models/product_models.dart';
 import '../providers/product_provider.dart';
@@ -93,10 +94,13 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             products.when(
               loading: () => const Padding(
                 padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
+                child: AppLoading(),
               ),
-              error: (_, _) => const _ErrorMessage(
-                message: 'Unable to load products. Please try again.',
+              error: (error, _) => AppError(
+                message: userFacingError(
+                  error,
+                  fallback: 'Unable to load products. Please try again.',
+                ),
               ),
               data: (page) => _ProductResults(page: page),
             ),
@@ -117,7 +121,7 @@ class _ProductResults extends ConsumerWidget {
     if (page.items.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(32),
-        child: Center(child: Text('No products found.')),
+        child: AppEmpty(message: 'No products found.'),
       );
     }
 
@@ -192,20 +196,6 @@ class _ProductResults extends ConsumerWidget {
       ],
     );
   }
-}
-
-class _ErrorMessage extends StatelessWidget {
-  const _ErrorMessage({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Text(
-      message,
-      style: TextStyle(color: Theme.of(context).colorScheme.error),
-    ),
-  );
 }
 
 String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';

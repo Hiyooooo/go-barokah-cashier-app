@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../../data/models/cash_sale_history_models.dart';
 import '../providers/cash_sale_history_provider.dart';
 
@@ -25,19 +26,13 @@ class CashSaleHistoryPage extends ConsumerWidget {
         ],
       ),
       body: history.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Unable to load sales history.'),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => ref.invalidate(cashSaleHistoryProvider),
-                child: const Text('Try again'),
-              ),
-            ],
+        loading: () => const AppLoading(),
+        error: (error, _) => AppError(
+          message: userFacingError(
+            error,
+            fallback: 'Unable to load sales history.',
           ),
+          onRetry: () => ref.invalidate(cashSaleHistoryProvider),
         ),
         data: (page) => _HistoryContent(page: page),
       ),
@@ -75,7 +70,7 @@ class _HistoryContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (page.items.isEmpty) {
-      return const Center(child: Text('No sales found.'));
+      return const AppEmpty(message: 'No sales found.');
     }
 
     final meta = page.meta;

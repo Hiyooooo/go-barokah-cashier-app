@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../../printing/receipt_print_service.dart';
 import '../providers/receipt_provider.dart';
 import '../../data/models/receipt_models.dart';
@@ -31,19 +32,10 @@ class ReceiptPage extends ConsumerWidget {
         ],
       ),
       body: receipt.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Unable to load receipt.'),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => ref.invalidate(receiptProvider(saleNumber)),
-                child: const Text('Try again'),
-              ),
-            ],
-          ),
+        loading: () => const AppLoading(),
+        error: (error, _) => AppError(
+          message: userFacingError(error, fallback: 'Unable to load receipt.'),
+          onRetry: () => ref.invalidate(receiptProvider(saleNumber)),
         ),
         data: (value) => _ReceiptPreview(
           receipt: value,

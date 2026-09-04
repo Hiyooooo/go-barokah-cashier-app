@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/user_profile_provider.dart';
 
@@ -54,8 +55,11 @@ class _AccountPageState extends ConsumerState<AccountPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Account')),
       body: profile.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => const Center(child: Text('Unable to load profile.')),
+        loading: () => const AppLoading(),
+        error: (error, _) => AppError(
+          message: userFacingError(error, fallback: 'Unable to load profile.'),
+          onRetry: () => ref.invalidate(userProfileProvider),
+        ),
         data: (value) {
           _fillForm(value.name, value.phoneNumber);
           return ListView(
@@ -102,7 +106,10 @@ class _AccountPageState extends ConsumerState<AccountPage> {
               if (profile.hasError && _editing) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Unable to update profile.',
+                  userFacingError(
+                    profile.error!,
+                    fallback: 'Unable to update profile.',
+                  ),
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],

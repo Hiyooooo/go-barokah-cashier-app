@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../../data/models/cart_models.dart';
 import '../providers/cart_provider.dart';
 
@@ -27,9 +28,13 @@ class CartPage extends ConsumerWidget {
         ],
       ),
       body: cart.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => const _CartMessage(
-          message: 'Unable to load cart. Please try again.',
+        loading: () => const AppLoading(),
+        error: (error, _) => AppError(
+          message: userFacingError(
+            error,
+            fallback: 'Unable to load cart. Please try again.',
+          ),
+          onRetry: () => ref.invalidate(cartProvider),
         ),
         data: (value) => _CartContent(cart: value),
       ),
@@ -45,7 +50,7 @@ class _CartContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (cart.items.isEmpty) {
-      return const _CartMessage(message: 'Your cart is empty.');
+      return const AppEmpty(message: 'Your cart is empty.');
     }
 
     return ListView(
@@ -139,15 +144,6 @@ class _CartItemTile extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _CartMessage extends StatelessWidget {
-  const _CartMessage({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Center(child: Text(message));
 }
 
 String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';

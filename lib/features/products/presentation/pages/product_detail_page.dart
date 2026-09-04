@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../providers/product_provider.dart';
 
 class ProductDetailPage extends ConsumerWidget {
@@ -15,11 +16,11 @@ class ProductDetailPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Product detail')),
       body: product.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => Center(
-          child: Text(
-            'Unable to load product details. Please try again.',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+        loading: () => const AppLoading(),
+        error: (error, _) => AppError(
+          message: userFacingError(
+            error,
+            fallback: 'Unable to load product details. Please try again.',
           ),
         ),
         data: (item) => ListView(

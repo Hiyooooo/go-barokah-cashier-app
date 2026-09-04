@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/network/api_client.dart';
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../providers/auth_provider.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -37,10 +37,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final isLoading = auth.isLoading;
-    final errorMessage =
-        auth.error is ApiException || auth.error is AuthException
-        ? auth.error.toString()
-        : 'Unable to sign in. Please try again.';
+    final errorMessage = auth.hasError
+        ? userFacingError(
+            auth.error!,
+            fallback: 'Unable to sign in. Please try again.',
+          )
+        : '';
 
     return Scaffold(
       body: Center(
