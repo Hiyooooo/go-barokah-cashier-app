@@ -8,13 +8,15 @@ class ProductRemoteDataSource {
 
   Future<ProductPage> getProducts({
     String? query,
-    int? categoryId,
+    List<int>? categoryIds,
     required int page,
     required int limit,
   }) async {
     final params = <String, dynamic>{'page': page, 'limit': limit};
     if (query != null && query.isNotEmpty) params['q'] = query;
-    if (categoryId != null) params['category_id'] = categoryId;
+    if (categoryIds != null && categoryIds.isNotEmpty) {
+      params['category_id'] = categoryIds.join(',');
+    }
 
     final response = await _apiClient.request<Map<String, dynamic>>(
       '/api/products',

@@ -19,32 +19,57 @@ class CashSaleHistoryNotifier extends AsyncNotifier<CashSaleHistoryResponse> {
   DateTime? startDate;
   DateTime? endDate;
   int page = 1;
+  int _requestVersion = 0;
 
   CashSaleHistoryRepository get _repository =>
       ref.read(cashSaleHistoryRepositoryProvider);
 
   @override
-  Future<CashSaleHistoryResponse> build() => _load();
+  Future<CashSaleHistoryResponse> build() => _load(
+    requestedPage: page,
+    requestedStartDate: startDate,
+    requestedEndDate: endDate,
+  );
 
-  Future<CashSaleHistoryResponse> _load() => _repository.getHistory(
-    page: page,
+  Future<CashSaleHistoryResponse> _load({
+    required int requestedPage,
+    DateTime? requestedStartDate,
+    DateTime? requestedEndDate,
+  }) => _repository.getHistory(
+    page: requestedPage,
     limit: pageSize,
-    startDate: startDate,
-    endDate: endDate,
+    startDate: requestedStartDate,
+    endDate: requestedEndDate,
   );
 
   Future<void> applyDates({DateTime? startDate, DateTime? endDate}) async {
     this.startDate = startDate;
     this.endDate = endDate;
     page = 1;
+    final requestVersion = ++_requestVersion;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(_load);
+    final nextState = await AsyncValue.guard(
+      () => _load(
+        requestedPage: page,
+        requestedStartDate: startDate,
+        requestedEndDate: endDate,
+      ),
+    );
+    if (requestVersion == _requestVersion) state = nextState;
   }
 
   Future<void> goToPage(int page) async {
     if (page < 1 || page == this.page) return;
     this.page = page;
+    final requestVersion = ++_requestVersion;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(_load);
+    final nextState = await AsyncValue.guard(
+      () => _load(
+        requestedPage: page,
+        requestedStartDate: startDate,
+        requestedEndDate: endDate,
+      ),
+    );
+    if (requestVersion == _requestVersion) state = nextState;
   }
 }

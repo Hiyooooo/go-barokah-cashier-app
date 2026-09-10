@@ -6,8 +6,28 @@ String userFacingError(
   Object error, {
   String fallback = 'Something went wrong.',
 }) {
-  if (error is ApiException && error.message.isNotEmpty) return error.message;
+  if (error is ApiException) {
+    final parts = <String>[];
+    if (error.message.isNotEmpty) parts.add(error.message);
+    if (error.code case final code?) parts.add('Code: $code');
+    if (_detailsText(error.details) case final details?) {
+      parts.add('Details: $details');
+    }
+    if (parts.isNotEmpty) return parts.join('\n');
+  }
   return fallback;
+}
+
+String? _detailsText(Object? details) {
+  if (details == null) return null;
+  if (details is String && details.isNotEmpty) return details;
+  if (details is Map) {
+    return details.entries
+        .map((entry) => '${entry.key}: ${entry.value}')
+        .join(', ');
+  }
+  if (details is List) return details.join(', ');
+  return details.toString();
 }
 
 class AppLoading extends StatelessWidget {
@@ -28,10 +48,11 @@ class AppEmpty extends StatelessWidget {
 }
 
 class AppError extends StatelessWidget {
-  const AppError({required this.message, this.onRetry, super.key});
+  const AppError({required this.message, this.onRetry, this.onBack, super.key});
 
   final String message;
   final VoidCallback? onRetry;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -46,6 +67,10 @@ class AppError extends StatelessWidget {
         if (onRetry != null) ...[
           const SizedBox(height: 12),
           OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
+        ],
+        if (onBack != null) ...[
+          const SizedBox(height: 8),
+          TextButton(onPressed: onBack, child: const Text('Go back')),
         ],
       ],
     ),

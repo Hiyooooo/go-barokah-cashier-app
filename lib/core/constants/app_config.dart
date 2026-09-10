@@ -3,6 +3,6 @@ class AppConfig {
 
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://joziah-unqualifiable-undesirably.ngrok-free.dev/',
+    defaultValue: 'https://api.hy-study.my.id/',
   );
 }

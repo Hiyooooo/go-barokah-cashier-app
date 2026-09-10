@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/async_state_widgets.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../data/models/user_profile.dart';
 import '../providers/user_profile_provider.dart';
 
 class AccountPage extends ConsumerStatefulWidget {
@@ -32,21 +33,120 @@ class _AccountPageState extends ConsumerState<AccountPage> {
 
   Future<void> _save() async {
     final name = _nameController.text.trim();
-    if (name.length < 3) return;
-    await ref
-        .read(userProfileProvider.notifier)
-        .updateProfile(
-          name: name,
-          phoneNumber: _phoneController.text.trim().isEmpty
-              ? null
-              : _phoneController.text.trim(),
-        );
-    if (mounted && !ref.read(userProfileProvider).hasError) {
-      setState(() => _editing = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Profile updated.')));
+    if (name.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name must be at least 3 characters.')),
+      );
+      return;
     }
+    final phone = _phoneController.text.trim();
+    if (phone.isNotEmpty && !RegExp(r'^[0-9+\-\s]{6,20}$').hasMatch(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid phone number.')),
+      );
+      return;
+    }
+    try {
+      await ref
+          .read(profileUpdateProvider.notifier)
+          .saveProfile(name: name, phoneNumber: phone.isEmpty ? null : phone);
+      if (mounted) {
+        setState(() => _editing = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile updated.')));
+      }
+    } catch (_) {
+      // The update provider retains the form and exposes the error below.
+    }
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You will need to sign in again to use the app.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await ref.read(authProvider.notifier).logout();
+    }
+  }
+
+  Widget _profileContent(BuildContext context, UserProfile value) {
+    final update = ref.watch(profileUpdateProvider);
+    final updating = update.isLoading;
+    _fillForm(value.name, value.phoneNumber);
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text('Profile', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 20),
+        if (_editing) ...[
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(labelText: 'Name'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(labelText: 'Phone number'),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: updating ? null : _save,
+            child: Text(updating ? 'Saving...' : 'Save'),
+          ),
+          TextButton(
+            onPressed: updating ? null : () => setState(() => _editing = false),
+            child: const Text('Cancel'),
+          ),
+          if (update.hasError)
+            Text(
+              userFacingError(
+                update.error!,
+                fallback: 'Unable to update profile.',
+              ),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+        ] else ...[
+          _InfoRow(label: 'Name', value: value.name),
+          _InfoRow(label: 'Email', value: value.email),
+          _InfoRow(label: 'Role', value: value.role),
+          _InfoRow(label: 'Phone', value: value.phoneNumber ?? '-'),
+          _InfoRow(
+            label: 'Email verified',
+            value: value.emailVerified ? 'Yes' : 'No',
+          ),
+          _InfoRow(
+            label: 'Phone verified',
+            value: value.phoneNumberVerified ? 'Yes' : 'No',
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(
+            onPressed: () => setState(() => _editing = true),
+            child: const Text('Edit profile'),
+          ),
+        ],
+        const SizedBox(height: 32),
+        FilledButton.tonal(
+          onPressed: updating ? null : _logout,
+          child: const Text('Log out'),
+        ),
+      ],
+    );
   }
 
   @override
@@ -60,67 +160,7 @@ class _AccountPageState extends ConsumerState<AccountPage> {
           message: userFacingError(error, fallback: 'Unable to load profile.'),
           onRetry: () => ref.invalidate(userProfileProvider),
         ),
-        data: (value) {
-          _fillForm(value.name, value.phoneNumber);
-          return ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              Text('Profile', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 20),
-              if (_editing) ...[
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Phone number'),
-                ),
-                const SizedBox(height: 16),
-                FilledButton(onPressed: _save, child: const Text('Save')),
-                TextButton(
-                  onPressed: () => setState(() => _editing = false),
-                  child: const Text('Cancel'),
-                ),
-              ] else ...[
-                _InfoRow(label: 'Name', value: value.name),
-                _InfoRow(label: 'Email', value: value.email),
-                _InfoRow(label: 'Role', value: value.role),
-                _InfoRow(label: 'Phone', value: value.phoneNumber ?? '-'),
-                _InfoRow(
-                  label: 'Email verified',
-                  value: value.emailVerified ? 'Yes' : 'No',
-                ),
-                _InfoRow(
-                  label: 'Phone verified',
-                  value: value.phoneNumberVerified ? 'Yes' : 'No',
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton(
-                  onPressed: () => setState(() => _editing = true),
-                  child: const Text('Edit profile'),
-                ),
-              ],
-              if (profile.hasError && _editing) ...[
-                const SizedBox(height: 12),
-                Text(
-                  userFacingError(
-                    profile.error!,
-                    fallback: 'Unable to update profile.',
-                  ),
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-              const SizedBox(height: 32),
-              FilledButton.tonal(
-                onPressed: () => ref.read(authProvider.notifier).logout(),
-                child: const Text('Log out'),
-              ),
-            ],
-          );
-        },
+        data: (value) => _profileContent(context, value),
       ),
     );
   }

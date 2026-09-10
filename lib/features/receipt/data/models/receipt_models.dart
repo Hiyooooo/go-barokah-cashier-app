@@ -26,21 +26,25 @@ class Receipt {
   final String? notes;
 
   factory Receipt.fromJson(Map<String, dynamic> json) => Receipt(
-    saleNumber: json['sale_number'] as String,
-    createdAt: _dateTime(json['created_at']),
-    cashierName:
-        (json['cashier'] as Map<String, dynamic>?)?['name'] as String? ?? '',
-    paymentMethod: json['payment_method'] as String,
-    items: (json['items'] as List<dynamic>? ?? const [])
-        .map((item) => ReceiptItem.fromJson(item as Map<String, dynamic>))
-        .toList(),
-    subtotal: json['subtotal'] as num,
-    discountTotal: json['discount_total'] as num,
-    grandTotal: json['grand_total'] as num,
-    cashReceived: json['cash_received'] as num,
-    changeAmount: json['change_amount'] as num,
+    saleNumber: _string(json, 'sale_number', 'saleNumber'),
+    createdAt: _dateTime(json['transaction_date'] ?? json['transactionDate']),
+    cashierName: _cashierName(json),
+    paymentMethod: _string(json, 'payment_method', 'paymentMethod'),
+    items: _items(json['items']),
+    subtotal: _number(json, 'subtotal', 'subtotal'),
+    discountTotal:
+        (json['discount_total'] ??
+                json['total_discount'] ??
+                json['discountTotal'])
+            as num,
+    grandTotal: (json['grand_total'] ?? json['grandTotal']) as num,
+    cashReceived: (json['cash_received'] ?? json['cashReceived']) as num,
+    changeAmount: (json['change_amount'] ?? json['changeAmount']) as num,
     notes: json['notes'] as String?,
   );
+
+  factory Receipt.fromCashSaleJson(Map<String, dynamic> json) =>
+      Receipt.fromJson(json);
 }
 
 class ReceiptItem {
@@ -63,15 +67,38 @@ class ReceiptItem {
   final num subtotal;
 
   factory ReceiptItem.fromJson(Map<String, dynamic> json) => ReceiptItem(
-    productId: (json['product_id'] as num?)?.toInt(),
-    productName: json['product_name'] as String,
+    productId: ((json['product_id'] ?? json['productId']) as num?)?.toInt(),
+    productName: _string(json, 'product_name', 'productName'),
     quantity: (json['quantity'] as num).toInt(),
-    unitPrice: json['unit_price'] as num,
-    discountAmount: json['discount_amount'] as num,
-    finalUnitPrice: json['final_unit_price'] as num,
+    unitPrice: (json['unit_price'] ?? json['unitPrice']) as num,
+    discountAmount: (json['discount'] ?? json['discountAmount'] ?? 0) as num,
+    finalUnitPrice: (json['final_unit_price'] ?? json['finalUnitPrice']) as num,
     subtotal: json['subtotal'] as num,
   );
 }
 
 DateTime? _dateTime(Object? value) =>
     value is String ? DateTime.tryParse(value) : null;
+
+String _string(Map<String, dynamic> json, String snake, String camel) =>
+    (json[snake] ?? json[camel]) as String;
+
+num _number(Map<String, dynamic> json, String snake, String camel) =>
+    (json[snake] ?? json[camel]) as num;
+
+List<ReceiptItem> _items(Object? value) {
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((item) => ReceiptItem.fromJson(item.cast<String, dynamic>()))
+      .toList();
+}
+
+String _cashierName(Map<String, dynamic> json) {
+  final cashier = json['cashier'];
+  if (cashier is Map) {
+    final name = cashier['name'];
+    if (name is String) return name;
+  }
+  return (json['cashierName'] as String?) ?? '';
+}

@@ -10,6 +10,8 @@ class ReceiptRemoteDataSource {
     final response = await _apiClient.request<Map<String, dynamic>>(
       '/api/cash-sales/$saleNumber',
     );
-    return Receipt.fromJson(response.data!['data'] as Map<String, dynamic>);
+    final payload = response.data!['data'];
+    final data = payload is Map<String, dynamic> ? payload : response.data!;
+    return Receipt.fromJson(data);
   }
 }

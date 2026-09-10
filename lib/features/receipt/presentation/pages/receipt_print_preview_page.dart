@@ -4,16 +4,24 @@ import 'package:printing/printing.dart';
 
 import '../../../../core/widgets/async_state_widgets.dart';
 import '../../printing/receipt_print_service.dart';
+import '../../data/models/receipt_models.dart';
 import '../providers/receipt_provider.dart';
 
 class ReceiptPrintPreviewPage extends ConsumerWidget {
-  const ReceiptPrintPreviewPage({required this.saleNumber, super.key});
+  const ReceiptPrintPreviewPage({
+    required this.saleNumber,
+    this.initialReceipt,
+    super.key,
+  });
 
   final String saleNumber;
+  final Receipt? initialReceipt;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final receipt = ref.watch(receiptProvider(saleNumber));
+    final receipt = initialReceipt != null
+        ? AsyncValue.data(initialReceipt!)
+        : ref.watch(receiptProvider(saleNumber));
     final service = ReceiptPrintService();
 
     return Scaffold(

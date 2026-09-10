@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/widgets/async_state_widgets.dart';
 import '../providers/auth_provider.dart';
@@ -36,6 +37,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final sessionExpired =
+        GoRouterState.of(context).uri.queryParameters['reason'] ==
+        'session_expired';
     final isLoading = auth.isLoading;
     final errorMessage = auth.hasError
         ? userFacingError(
@@ -78,10 +82,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ? 'Password is required'
                         : null,
                   ),
-                  if (auth.hasError) ...[
+                  if (sessionExpired || auth.hasError) ...[
                     const SizedBox(height: 12),
                     Text(
-                      errorMessage,
+                      sessionExpired
+                          ? 'Your session expired. Please sign in again.'
+                          : errorMessage,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                       ),

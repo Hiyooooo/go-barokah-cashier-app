@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'cashier_shell.dart';
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
 import '../features/account/presentation/pages/account_page.dart';
@@ -10,10 +12,12 @@ import '../features/products/presentation/pages/product_detail_page.dart';
 import '../features/products/presentation/pages/products_page.dart';
 import '../features/receipt/presentation/pages/receipt_page.dart';
 import '../features/receipt/presentation/pages/receipt_print_preview_page.dart';
+import '../features/receipt/data/models/receipt_models.dart';
 import '../features/sales/presentation/pages/cash_sale_history_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authProvider);
+  final sessionExpired = ref.watch(sessionExpiredProvider);
   final isCashier = auth.valueOrNull?.role == 'cashier';
 
   return GoRouter(
@@ -23,33 +27,91 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (state.matchedLocation == '/login') {
         return isCashier ? '/products' : null;
       }
-      return isCashier ? null : '/login';
+      if (isCashier) return null;
+      return sessionExpired ? '/login?reason=session_expired' : '/login';
     },
     routes: [
       GoRoute(path: '/', redirect: (_, _) => '/login'),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
-      GoRoute(path: '/products', builder: (_, _) => const ProductsPage()),
+      StatefulShellRoute.indexedStack(
+        builder: (_, _, navigationShell) =>
+            CashierShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/products',
+                builder: (_, _) => const ProductsPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/cart', builder: (_, _) => const CartPage()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/sales',
+                builder: (_, _) => const CashSaleHistoryPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/account', builder: (_, _) => const AccountPage()),
+            ],
+          ),
+        ],
+      ),
       GoRoute(
         path: '/products/:id',
-        builder: (_, state) => ProductDetailPage(
-          productId: int.parse(state.pathParameters['id']!),
-        ),
+        builder: (_, state) {
+          final productId = int.tryParse(state.pathParameters['id'] ?? '');
+          return productId == null
+              ? const RouteErrorPage(message: 'Product not found.')
+              : ProductDetailPage(productId: productId);
+        },
       ),
-      GoRoute(path: '/cart', builder: (_, _) => const CartPage()),
       GoRoute(path: '/checkout', builder: (_, _) => const CheckoutPage()),
-      GoRoute(path: '/sales', builder: (_, _) => const CashSaleHistoryPage()),
       GoRoute(
         path: '/receipt/:saleNumber',
-        builder: (_, state) =>
-            ReceiptPage(saleNumber: state.pathParameters['saleNumber']!),
+        builder: (_, state) {
+          final saleNumber = state.pathParameters['saleNumber'] ?? '';
+          return saleNumber.trim().isEmpty
+              ? const RouteErrorPage(message: 'Receipt not found.')
+              : ReceiptPage(
+                  saleNumber: saleNumber,
+                  initialReceipt: state.extra is Receipt
+                      ? state.extra as Receipt
+                      : null,
+                );
+        },
       ),
       GoRoute(
         path: '/receipt/:saleNumber/print',
         builder: (_, state) => ReceiptPrintPreviewPage(
           saleNumber: state.pathParameters['saleNumber']!,
+          initialReceipt: state.extra is Receipt
+              ? state.extra as Receipt
+              : null,
         ),
       ),
-      GoRoute(path: '/account', builder: (_, _) => const AccountPage()),
     ],
+    errorBuilder: (_, state) =>
+        RouteErrorPage(message: state.error?.message ?? 'Page not found.'),
   );
 });
+
+class RouteErrorPage extends StatelessWidget {
+  const RouteErrorPage({required this.message, super.key});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Page unavailable')),
+    body: Center(child: Text(message)),
+  );
+}

@@ -10,12 +10,12 @@ class ProductRepository {
 
   Future<ProductPage> getProducts({
     String? query,
-    int? categoryId,
+    List<int>? categoryIds,
     required int page,
     required int limit,
   }) => _dataSource.getProducts(
     query: query,
-    categoryId: categoryId,
+    categoryIds: categoryIds,
     page: page,
     limit: limit,
   );

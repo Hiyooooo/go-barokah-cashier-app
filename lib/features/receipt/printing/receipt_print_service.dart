@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../../core/utils/formatters.dart';
 
 import '../data/models/receipt_models.dart';
 
@@ -44,7 +45,7 @@ class ReceiptPrintService {
           pw.Text('Sale: ${receipt.saleNumber}'),
           pw.Text('Date: ${receipt.createdAt?.toLocal() ?? '-'}'),
           pw.Text('Cashier: ${receipt.cashierName}'),
-          pw.Text('Payment: ${receipt.paymentMethod}'),
+          pw.Text('Payment: ${receipt.paymentMethod.toUpperCase()}'),
           pw.Divider(),
           ...receipt.items.expand(_itemRows),
           pw.Divider(),
@@ -65,7 +66,10 @@ class ReceiptPrintService {
 
   Iterable<pw.Widget> _itemRows(ReceiptItem item) => [
     pw.Text(item.productName),
-    _row('${item.quantity} x ${_price(item.finalUnitPrice)}', item.subtotal),
+    _row(
+      '${item.quantity} x ${formatPrice(item.finalUnitPrice)}',
+      item.subtotal,
+    ),
   ];
 
   pw.Widget _row(String label, num value, {bool bold = false}) => pw.Row(
@@ -76,13 +80,11 @@ class ReceiptPrintService {
         style: bold ? pw.TextStyle(fontWeight: pw.FontWeight.bold) : null,
       ),
       pw.Text(
-        _price(value),
+        formatPrice(value),
         style: bold ? pw.TextStyle(fontWeight: pw.FontWeight.bold) : null,
       ),
     ],
   );
-
-  String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';
 }
 
 class ReceiptPrintException implements Exception {

@@ -3,18 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/widgets/async_state_widgets.dart';
+import '../../../../core/utils/formatters.dart';
+import '../../data/models/receipt_models.dart';
 import '../../printing/receipt_print_service.dart';
 import '../providers/receipt_provider.dart';
-import '../../data/models/receipt_models.dart';
 
-class ReceiptPage extends ConsumerWidget {
-  const ReceiptPage({required this.saleNumber, super.key});
+class ReceiptPage extends ConsumerStatefulWidget {
+  const ReceiptPage({required this.saleNumber, this.initialReceipt, super.key});
 
   final String saleNumber;
+  final Receipt? initialReceipt;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final receipt = ref.watch(receiptProvider(saleNumber));
+  ConsumerState<ReceiptPage> createState() => _ReceiptPageState();
+}
+
+class _ReceiptPageState extends ConsumerState<ReceiptPage> {
+  final _printService = ReceiptPrintService();
+
+  @override
+  Widget build(BuildContext context) {
+    final receipt = widget.initialReceipt != null
+        ? AsyncValue.data(widget.initialReceipt!)
+        : ref.watch(receiptProvider(widget.saleNumber));
 
     return Scaffold(
       appBar: AppBar(
@@ -26,7 +37,7 @@ class ReceiptPage extends ConsumerWidget {
             data: (value) => IconButton(
               tooltip: 'Print receipt',
               icon: const Icon(Icons.print_outlined),
-              onPressed: () => _print(context, value),
+              onPressed: () => _print(value),
             ),
           ),
         ],
@@ -35,37 +46,34 @@ class ReceiptPage extends ConsumerWidget {
         loading: () => const AppLoading(),
         error: (error, _) => AppError(
           message: userFacingError(error, fallback: 'Unable to load receipt.'),
-          onRetry: () => ref.invalidate(receiptProvider(saleNumber)),
+          onRetry: () => ref.invalidate(receiptProvider(widget.saleNumber)),
+          onBack: () => context.pop(),
         ),
         data: (value) => _ReceiptPreview(
           receipt: value,
-          onPrint: () => _print(context, value),
-          onPreview: () => context.push('/receipt/$saleNumber/print'),
+          onPrint: () => _print(value),
+          onPreview: () =>
+              context.push('/receipt/${widget.saleNumber}/print', extra: value),
         ),
       ),
     );
   }
 
-  Future<void> _print(BuildContext context, Receipt receipt) async {
+  Future<void> _print(Receipt receipt) async {
     try {
-      await ReceiptPrintService().print(receipt);
+      await _printService.print(receipt);
     } on ReceiptPrintException catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
-      }
+      _showPrintError(error.message);
     } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Printing failed. The transaction is still successful.',
-            ),
-          ),
-        );
-      }
+      _showPrintError('Printing failed. The transaction is still successful.');
     }
+  }
+
+  void _showPrintError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -88,17 +96,18 @@ class _ReceiptPreview extends StatelessWidget {
       Text('Sale number: ${receipt.saleNumber}'),
       Text('Date: ${receipt.createdAt?.toLocal() ?? '-'}'),
       Text('Cashier: ${receipt.cashierName}'),
-      Text('Payment: ${receipt.paymentMethod}'),
+      Text('Payment: ${receipt.paymentMethod.toUpperCase()}'),
       const Divider(height: 28),
       ...receipt.items.map(
         (item) => ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(item.productName),
           subtitle: Text(
-            '${item.quantity} x ${_price(item.finalUnitPrice)} '
+            '${item.quantity} x ${formatPrice(item.unitPrice)} '
+            '→ ${formatPrice(item.finalUnitPrice)} '
             '(discount ${item.discountAmount}%)',
           ),
-          trailing: Text(_price(item.subtotal)),
+          trailing: Text(formatPrice(item.subtotal)),
         ),
       ),
       const Divider(height: 28),
@@ -137,9 +146,7 @@ class _ReceiptRow extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text(label), Text(_price(value))],
+      children: [Text(label), Text(formatPrice(value))],
     ),
   );
 }
-
-String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';

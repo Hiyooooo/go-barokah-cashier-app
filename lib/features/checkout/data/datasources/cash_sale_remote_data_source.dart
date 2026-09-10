@@ -21,9 +21,9 @@ class CashSaleRemoteDataSource {
       data: {'cart_item_ids': cartItemIds, 'cash_received': cashReceived},
       options: Options(headers: {'Idempotency-Key': idempotencyKey}),
     );
-    return CashSaleResult.fromJson(
-      response.data!['data'] as Map<String, dynamic>,
-    );
+    final payload = response.data!['data'];
+    final data = payload is Map<String, dynamic> ? payload : response.data!;
+    return CashSaleResult.fromJson(data);
   }
 }
 

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/widgets/async_state_widgets.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../data/models/checkout_models.dart';
 import '../../../cart/data/models/cart_models.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
+import '../../../receipt/data/models/receipt_models.dart';
 import '../providers/checkout_provider.dart';
 
 class CheckoutPage extends ConsumerStatefulWidget {
@@ -39,29 +41,60 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
   }
 
+  Future<void> _openReceipt(CashSaleResult result) async {
+    await context.push(
+      '/receipt/${result.saleNumber}',
+      extra: Receipt.fromCashSaleJson(result.toJson()),
+    );
+    if (mounted) {
+      await ref.read(checkoutProvider.notifier).finalizeSale();
+    }
+  }
+
+  Future<void> _startNewSale() async {
+    await ref.read(checkoutProvider.notifier).resetCompletedSale();
+    if (!mounted) return;
+    context.go('/products');
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
     final checkout = ref.watch(checkoutProvider);
+    final result = checkout.valueOrNull;
+    final body = result != null
+        ? ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _SuccessResult(
+                result: result,
+                onOpenReceipt: _openReceipt,
+                onNewSale: _startNewSale,
+              ),
+            ],
+          )
+        : cart.when(
+            loading: () => const AppLoading(),
+            error: (error, _) => AppError(
+              message: userFacingError(error, fallback: 'Unable to load cart.'),
+              onRetry: () => ref.invalidate(cartProvider),
+            ),
+            data: (value) => value.items.isEmpty
+                ? const AppEmpty(message: 'Your cart is empty.')
+                : _CheckoutContent(
+                    cart: value,
+                    checkout: checkout,
+                    formKey: _formKey,
+                    cashController: _cashController,
+                    onSubmit: () => _submit(value),
+                    onOpenReceipt: _openReceipt,
+                    onNewSale: _startNewSale,
+                  ),
+          );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
-      body: cart.when(
-        loading: () => const AppLoading(),
-        error: (error, _) => AppError(
-          message: userFacingError(error, fallback: 'Unable to load cart.'),
-          onRetry: () => ref.invalidate(cartProvider),
-        ),
-        data: (value) => value.items.isEmpty
-            ? const AppEmpty(message: 'Your cart is empty.')
-            : _CheckoutContent(
-                cart: value,
-                checkout: checkout,
-                formKey: _formKey,
-                cashController: _cashController,
-                onSubmit: () => _submit(value),
-              ),
-      ),
+      body: body,
     );
   }
 }
@@ -73,6 +106,8 @@ class _CheckoutContent extends StatelessWidget {
     required this.formKey,
     required this.cashController,
     required this.onSubmit,
+    required this.onOpenReceipt,
+    required this.onNewSale,
   });
 
   final Cart cart;
@@ -80,6 +115,8 @@ class _CheckoutContent extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController cashController;
   final VoidCallback onSubmit;
+  final ValueChanged<CashSaleResult> onOpenReceipt;
+  final VoidCallback onNewSale;
 
   @override
   Widget build(BuildContext context) {
@@ -95,46 +132,70 @@ class _CheckoutContent extends StatelessWidget {
           (item) => ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(item.name),
-            subtitle: Text('${item.quantity} x ${_price(item.finalPrice)}'),
-            trailing: Text(_price(item.subtotal)),
+            subtitle: Text(
+              '${item.quantity} x ${formatPrice(item.finalPrice)}',
+            ),
+            trailing: Text(formatPrice(item.subtotal)),
           ),
         ),
         const Divider(),
-        _SummaryRow(label: 'Subtotal', value: _price(cart.summary.subtotal)),
         _SummaryRow(
-          label: 'Discount',
-          value: _price(cart.summary.discountTotal),
+          label: 'Subtotal after discount',
+          value: formatPrice(cart.summary.subtotal),
         ),
         _SummaryRow(
-          label: 'Total',
-          value: _price(cart.summary.subtotal),
+          label: 'Discount',
+          value: formatPrice(cart.summary.discountTotal),
+        ),
+        _SummaryRow(
+          label: 'Amount payable',
+          value: formatPrice(cart.summary.subtotal),
           emphasized: true,
         ),
         if (result == null) ...[
           const SizedBox(height: 24),
-          Form(
-            key: formKey,
-            child: TextFormField(
-              controller: cashController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Cash received',
-                prefixText: 'Rp ',
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) {
-                final cash = num.tryParse(value?.trim() ?? '');
-                if (cash == null || cash < 0) {
-                  return 'Enter a valid cash amount';
-                }
-                if (cash < cart.summary.subtotal) {
-                  return 'Cash is less than the total';
-                }
-                return null;
-              },
-            ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: cashController,
+            builder: (context, value, _) {
+              final cash = num.tryParse(value.text.trim());
+              final changePreview =
+                  cash != null && cash >= cart.summary.subtotal
+                  ? cash - cart.summary.subtotal
+                  : null;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Form(
+                    key: formKey,
+                    child: TextFormField(
+                      controller: cashController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Cash received',
+                        prefixText: 'Rp ',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        final cash = num.tryParse(value?.trim() ?? '');
+                        if (cash == null || cash < 0) {
+                          return 'Enter a valid cash amount';
+                        }
+                        if (cash < cart.summary.subtotal) {
+                          return 'Cash is less than the total';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  if (changePreview != null) ...[
+                    const SizedBox(height: 8),
+                    Text('Estimated change: ${formatPrice(changePreview)}'),
+                  ],
+                ],
+              );
+            },
           ),
           if (checkout.hasError) ...[
             const SizedBox(height: 12),
@@ -152,16 +213,26 @@ class _CheckoutContent extends StatelessWidget {
             child: Text(isSubmitting ? 'Processing...' : 'Complete cash sale'),
           ),
         ] else
-          _SuccessResult(result: result),
+          _SuccessResult(
+            result: result,
+            onOpenReceipt: onOpenReceipt,
+            onNewSale: onNewSale,
+          ),
       ],
     );
   }
 }
 
 class _SuccessResult extends StatelessWidget {
-  const _SuccessResult({required this.result});
+  const _SuccessResult({
+    required this.result,
+    required this.onOpenReceipt,
+    required this.onNewSale,
+  });
 
   final CashSaleResult result;
+  final ValueChanged<CashSaleResult> onOpenReceipt;
+  final VoidCallback onNewSale;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -176,14 +247,19 @@ class _SuccessResult extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           Text('Sale number: ${result.saleNumber}'),
-          Text('Grand total: ${_price(result.grandTotal)}'),
-          Text('Cash received: ${_price(result.cashReceived)}'),
-          Text('Change: ${_price(result.changeAmount)}'),
+          Text('Grand total: ${formatPrice(result.grandTotal)}'),
+          Text('Cash received: ${formatPrice(result.cashReceived)}'),
+          Text('Change: ${formatPrice(result.changeAmount)}'),
           const SizedBox(height: 12),
           OutlinedButton(
-            onPressed: () => context.push('/receipt/${result.saleNumber}'),
+            onPressed: () => onOpenReceipt(result),
             child: const Text('View receipt'),
           ),
+          FilledButton.tonal(
+            onPressed: () => onOpenReceipt(result),
+            child: const Text('Print receipt'),
+          ),
+          OutlinedButton(onPressed: onNewSale, child: const Text('New sale')),
         ],
       ),
     ),
@@ -219,5 +295,3 @@ class _SummaryRow extends StatelessWidget {
     ),
   );
 }
-
-String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';

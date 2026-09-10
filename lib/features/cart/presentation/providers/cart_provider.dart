@@ -13,19 +13,26 @@ final cartProvider = AsyncNotifierProvider<CartNotifier, Cart>(
 );
 
 class CartNotifier extends AsyncNotifier<Cart> {
+  final _mutatingProducts = <int>{};
+
+  bool isMutatingProduct(int productId) =>
+      _mutatingProducts.contains(productId);
+
   CartRepository get _repository => ref.read(cartRepositoryProvider);
 
   @override
   Future<Cart> build() => _repository.getCart();
 
   Future<void> addItem(int productId, {int quantity = 1}) =>
-      _mutate(() => _repository.addItem(productId, quantity));
+      _mutateProduct(productId, () => _repository.addItem(productId, quantity));
 
-  Future<void> updateItem(int productId, int quantity) =>
-      _mutate(() => _repository.updateItem(productId, quantity));
+  Future<void> updateItem(int productId, int quantity) => _mutateProduct(
+    productId,
+    () => _repository.updateItem(productId, quantity),
+  );
 
   Future<void> removeItem(int productId) =>
-      _mutate(() => _repository.removeItem(productId));
+      _mutateProduct(productId, () => _repository.removeItem(productId));
 
   Future<void> clearCart() => _mutate(_repository.clearCart);
 
@@ -36,5 +43,17 @@ class CartNotifier extends AsyncNotifier<Cart> {
   Future<void> _mutate(Future<Cart> Function() operation) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(operation);
+  }
+
+  Future<void> _mutateProduct(
+    int productId,
+    Future<Cart> Function() operation,
+  ) async {
+    if (!_mutatingProducts.add(productId)) return;
+    try {
+      await _mutate(operation);
+    } finally {
+      _mutatingProducts.remove(productId);
+    }
   }
 }

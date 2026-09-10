@@ -26,7 +26,7 @@ class ProductCatalogNotifier extends AsyncNotifier<ProductPage> {
   static const pageSize = 10;
 
   String? query;
-  int? categoryId;
+  List<int> categoryIds = const [];
   int page = 1;
 
   ProductRepository get _repository => ref.read(productRepositoryProvider);
@@ -36,18 +36,29 @@ class ProductCatalogNotifier extends AsyncNotifier<ProductPage> {
 
   Future<ProductPage> _load() => _repository.getProducts(
     query: query,
-    categoryId: categoryId,
+    categoryIds: categoryIds,
     page: page,
     limit: pageSize,
   );
 
-  Future<void> applyFilters({String? query, int? categoryId}) async {
-    this.query = query?.trim().isEmpty == true ? null : query?.trim();
-    this.categoryId = categoryId;
+  Future<void> applyFilters({String? query, List<int>? categoryIds}) async {
+    final nextQuery = query?.trim().isEmpty == true ? null : query?.trim();
+    final nextCategoryIds = List<int>.unmodifiable(
+      categoryIds ?? const <int>[],
+    );
+    if (this.query == nextQuery && _sameCategories(nextCategoryIds)) return;
+    this.query = nextQuery;
+    this.categoryIds = nextCategoryIds;
     page = 1;
     state = const AsyncLoading();
     state = await AsyncValue.guard(_load);
   }
+
+  bool _sameCategories(List<int> next) =>
+      categoryIds.length == next.length &&
+      categoryIds.asMap().entries.every(
+        (entry) => entry.value == next[entry.key],
+      );
 
   Future<void> goToPage(int page) async {
     if (page < 1 || page == this.page) return;

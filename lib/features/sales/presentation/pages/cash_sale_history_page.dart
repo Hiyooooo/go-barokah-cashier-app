@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/widgets/async_state_widgets.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../data/models/cash_sale_history_models.dart';
 import '../providers/cash_sale_history_provider.dart';
 
@@ -19,6 +21,13 @@ class CashSaleHistoryPage extends ConsumerWidget {
         title: const Text('Sales history'),
         actions: [
           IconButton(
+            tooltip: 'Refresh sales history',
+            onPressed: history.isLoading
+                ? null
+                : () => ref.invalidate(cashSaleHistoryProvider),
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
             tooltip: 'Filter by date',
             onPressed: () => _pickDates(context, notifier),
             icon: const Icon(Icons.date_range),
@@ -34,7 +43,12 @@ class CashSaleHistoryPage extends ConsumerWidget {
           ),
           onRetry: () => ref.invalidate(cashSaleHistoryProvider),
         ),
-        data: (page) => _HistoryContent(page: page),
+        data: (page) => _HistoryContent(
+          page: page,
+          startDate: notifier.startDate,
+          endDate: notifier.endDate,
+          onResetDates: () => notifier.applyDates(),
+        ),
       ),
     );
   }
@@ -63,12 +77,21 @@ class CashSaleHistoryPage extends ConsumerWidget {
 }
 
 class _HistoryContent extends ConsumerWidget {
-  const _HistoryContent({required this.page});
+  const _HistoryContent({
+    required this.page,
+    this.startDate,
+    this.endDate,
+    required this.onResetDates,
+  });
 
   final CashSaleHistoryResponse page;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final VoidCallback onResetDates;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final loading = ref.watch(cashSaleHistoryProvider).isLoading;
     if (page.items.isEmpty) {
       return const AppEmpty(message: 'No sales found.');
     }
@@ -77,15 +100,26 @@ class _HistoryContent extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (startDate != null || endDate != null)
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Filter: ${_formatDate(startDate)} - ${_formatDate(endDate)}',
+                ),
+              ),
+              TextButton(onPressed: onResetDates, child: const Text('Reset')),
+            ],
+          ),
         ...page.items.map(
           (sale) => Card(
             child: ListTile(
               onTap: () => context.push('/receipt/${sale.saleNumber}'),
               title: Text(sale.saleNumber),
               subtitle: Text(
-                '${sale.paymentMethod} | ${sale.createdAt?.toLocal() ?? '-'}',
+                '${sale.paymentMethod.toUpperCase()} | ${_formatDate(sale.createdAt)}',
               ),
-              trailing: Text(_price(sale.grandTotal)),
+              trailing: Text(formatPrice(sale.grandTotal)),
             ),
           ),
         ),
@@ -95,7 +129,7 @@ class _HistoryContent extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               OutlinedButton(
-                onPressed: meta.page > 1
+                onPressed: meta.page > 1 && !loading
                     ? () => ref
                           .read(cashSaleHistoryProvider.notifier)
                           .goToPage(meta.page - 1)
@@ -107,7 +141,7 @@ class _HistoryContent extends ConsumerWidget {
                 child: Text('Page ${meta.page} of ${meta.totalPages}'),
               ),
               OutlinedButton(
-                onPressed: meta.page < meta.totalPages
+                onPressed: meta.page < meta.totalPages && !loading
                     ? () => ref
                           .read(cashSaleHistoryProvider.notifier)
                           .goToPage(meta.page + 1)
@@ -122,4 +156,6 @@ class _HistoryContent extends ConsumerWidget {
   }
 }
 
-String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';
+String _formatDate(DateTime? value) => value == null
+    ? '-'
+    : DateFormat('dd MMM yyyy, HH.mm', 'id_ID').format(value.toLocal());

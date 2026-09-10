@@ -6,13 +6,11 @@ class CashSaleHistoryResponse {
 
   factory CashSaleHistoryResponse.fromJson(Map<String, dynamic> json) =>
       CashSaleHistoryResponse(
-        items: (json['data'] as List<dynamic>? ?? const [])
-            .map(
-              (item) =>
-                  CashSaleHistoryItem.fromJson(item as Map<String, dynamic>),
-            )
-            .toList(),
-        meta: _pagination(json['meta']),
+        items: _items(json['data'] ?? json['items']),
+        meta: _pagination(
+          json['meta'] ??
+              (json['data'] is Map ? (json['data'] as Map)['meta'] : null),
+        ),
       );
 }
 
@@ -20,34 +18,26 @@ class CashSaleHistoryItem {
   const CashSaleHistoryItem({
     required this.saleNumber,
     required this.paymentMethod,
-    required this.subtotal,
-    required this.discountTotal,
     required this.grandTotal,
-    required this.cashReceived,
-    required this.changeAmount,
     required this.createdAt,
   });
 
   final String saleNumber;
   final String paymentMethod;
-  final num subtotal;
-  final num discountTotal;
   final num grandTotal;
-  final num cashReceived;
-  final num changeAmount;
   final DateTime? createdAt;
 
-  factory CashSaleHistoryItem.fromJson(Map<String, dynamic> json) =>
-      CashSaleHistoryItem(
-        saleNumber: json['saleNumber'] as String,
-        paymentMethod: json['paymentMethod'] as String,
-        subtotal: json['subtotal'] as num,
-        discountTotal: json['discountTotal'] as num,
-        grandTotal: json['grandTotal'] as num,
-        cashReceived: json['cashReceived'] as num,
-        changeAmount: json['changeAmount'] as num,
-        createdAt: _dateTime(json['createdAt']),
-      );
+  factory CashSaleHistoryItem.fromJson(Map<String, dynamic> json) {
+    final saleNumber = _string(json, 'sale_number', 'saleNumber');
+    final paymentMethod = _string(json, 'payment_method', 'paymentMethod');
+    final date = json['transaction_date'] ?? json['createdAt'];
+    return CashSaleHistoryItem(
+      saleNumber: saleNumber,
+      paymentMethod: paymentMethod,
+      grandTotal: _number(json, 'grand_total', 'grandTotal'),
+      createdAt: _dateTime(date),
+    );
+  }
 }
 
 class PaginationMeta {
@@ -67,12 +57,27 @@ class PaginationMeta {
     page: (json['page'] as num).toInt(),
     limit: (json['limit'] as num).toInt(),
     total: (json['total'] as num).toInt(),
-    totalPages: (json['totalPages'] as num).toInt(),
+    totalPages: ((json['totalPages'] ?? json['total_pages']) as num).toInt(),
   );
 }
 
 PaginationMeta? _pagination(Object? value) =>
     value is Map<String, dynamic> ? PaginationMeta.fromJson(value) : null;
+
+List<CashSaleHistoryItem> _items(Object? value) {
+  if (value is Map) return _items(value['items'] ?? value['data']);
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((item) => CashSaleHistoryItem.fromJson(item.cast<String, dynamic>()))
+      .toList();
+}
+
+String _string(Map<String, dynamic> json, String snake, String camel) =>
+    (json[snake] ?? json[camel]) as String;
+
+num _number(Map<String, dynamic> json, String snake, String camel) =>
+    (json[snake] ?? json[camel]) as num;
 
 DateTime? _dateTime(Object? value) =>
     value is String ? DateTime.tryParse(value) : null;

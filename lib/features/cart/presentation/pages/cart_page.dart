@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/widgets/async_state_widgets.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../data/models/cart_models.dart';
+import '../../../checkout/presentation/providers/checkout_provider.dart';
 import '../providers/cart_provider.dart';
 
 class CartPage extends ConsumerWidget {
@@ -21,7 +23,7 @@ class CartPage extends ConsumerWidget {
             IconButton(
               onPressed: cart.isLoading
                   ? null
-                  : () => ref.read(cartProvider.notifier).clearCart(),
+                  : () => _confirmClear(context, ref),
               tooltip: 'Clear cart',
               icon: const Icon(Icons.delete_sweep_outlined),
             ),
@@ -40,6 +42,29 @@ class CartPage extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _confirmClear(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear cart?'),
+        content: const Text('All items will be removed from the cart.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear cart'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(cartProvider.notifier).clearCart();
+    }
+  }
 }
 
 class _CartContent extends ConsumerWidget {
@@ -50,7 +75,19 @@ class _CartContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (cart.items.isEmpty) {
-      return const AppEmpty(message: 'Your cart is empty.');
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Your cart is empty.'),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => context.go('/products'),
+              child: const Text('Browse products'),
+            ),
+          ],
+        ),
+      );
     }
 
     return ListView(
@@ -65,10 +102,10 @@ class _CartContent extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text('Items: ${cart.summary.totalQuantity}'),
-                Text('Discount: ${_price(cart.summary.discountTotal)}'),
+                Text('Discount: ${formatPrice(cart.summary.discountTotal)}'),
                 const SizedBox(height: 4),
                 Text(
-                  'Subtotal: ${_price(cart.summary.subtotal)}',
+                  'Subtotal: ${formatPrice(cart.summary.subtotal)}',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ],
@@ -77,7 +114,10 @@ class _CartContent extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         FilledButton(
-          onPressed: () => context.push('/checkout'),
+          onPressed: () async {
+            await ref.read(checkoutProvider.notifier).resetCompletedSale();
+            if (context.mounted) context.push('/checkout');
+          },
           child: const Text('Proceed to checkout'),
         ),
       ],
@@ -113,7 +153,7 @@ class _CartItemTile extends ConsumerWidget {
                 ),
               ],
             ),
-            Text('${_price(item.finalPrice)} each | Stock: ${item.stock}'),
+            Text('${formatPrice(item.finalPrice)} each | Stock: ${item.stock}'),
             Row(
               children: [
                 IconButton(
@@ -136,7 +176,7 @@ class _CartItemTile extends ConsumerWidget {
                   icon: const Icon(Icons.add),
                 ),
                 const Spacer(),
-                Text(_price(item.subtotal)),
+                Text(formatPrice(item.subtotal)),
               ],
             ),
           ],
@@ -145,5 +185,3 @@ class _CartItemTile extends ConsumerWidget {
     );
   }
 }
-
-String _price(num value) => 'Rp ${value.toStringAsFixed(0)}';
