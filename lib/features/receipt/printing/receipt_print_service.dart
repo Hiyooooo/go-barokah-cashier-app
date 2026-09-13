@@ -1,4 +1,5 @@
-import 'dart:typed_data';
+import 'dart:developer' as developer;
+import 'package:flutter/foundation.dart';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -8,20 +9,69 @@ import '../../../core/utils/formatters.dart';
 import '../data/models/receipt_models.dart';
 
 class ReceiptPrintService {
-  Future<void> print(Receipt receipt) async {
-    final info = await Printing.info();
-    if (!info.canPrint) {
-      throw const ReceiptPrintException(
-        'No printer is available on this device.',
-      );
-    }
+  static const receiptPageFormat = PdfPageFormat(
+    80 * PdfPageFormat.mm,
+    200 * PdfPageFormat.mm,
+  );
 
-    final printed = await Printing.layoutPdf(
-      name: 'Receipt-${receipt.saleNumber}.pdf',
-      onLayout: (_) => buildPdf(receipt),
+  Future<void> print(Receipt receipt) async {
+    final startedAt = DateTime.now();
+    var layoutCalls = 0;
+    _log(
+      'START sale=${receipt.saleNumber} items=${receipt.items.length} '
+      'format=${receiptPageFormat.width}x${receiptPageFormat.height} '
+      'dynamicLayout=false',
     );
-    if (!printed) {
-      throw const ReceiptPrintException('Printing was cancelled or failed.');
+
+    try {
+      final info = await Printing.info();
+      _log(
+        'INFO canPrint=${info.canPrint} directPrint=${info.directPrint} '
+        'canListPrinters=${info.canListPrinters} dynamicLayout=${info.dynamicLayout} '
+        'canShare=${info.canShare}',
+      );
+
+      if (!info.canPrint) {
+        throw const ReceiptPrintException(
+          'No printer is available on this device.',
+        );
+      }
+
+      // Build before opening the platform dialog. The callback then returns
+      // stable bytes even if the Android print service changes configuration.
+      final pdfStartedAt = DateTime.now();
+      final pdf = await buildPdf(receipt);
+      _log(
+        'PDF_READY bytes=${pdf.length} elapsedMs=${DateTime.now().difference(pdfStartedAt).inMilliseconds}',
+      );
+
+      _log('LAYOUT_OPEN');
+      final printed = await Printing.layoutPdf(
+        format: receiptPageFormat,
+        dynamicLayout: false,
+        name: 'Receipt-${receipt.saleNumber}.pdf',
+        onLayout: (_) async {
+          layoutCalls++;
+          _log('LAYOUT_CALLBACK count=$layoutCalls bytes=${pdf.length}');
+          return pdf;
+        },
+      );
+      _log(
+        'LAYOUT_RESULT printed=$printed callbacks=$layoutCalls '
+        'elapsedMs=${DateTime.now().difference(startedAt).inMilliseconds}',
+      );
+      if (!printed) {
+        throw const ReceiptPrintException('Printing was cancelled or failed.');
+      }
+      _log('SUCCESS sale=${receipt.saleNumber}');
+    } catch (error, stackTrace) {
+      _logError(
+        'FAIL sale=${receipt.saleNumber} type=${error.runtimeType} '
+        'callbacks=$layoutCalls elapsedMs=${DateTime.now().difference(startedAt).inMilliseconds}',
+        error,
+        stackTrace,
+      );
+      rethrow;
     }
   }
 
@@ -29,10 +79,7 @@ class ReceiptPrintService {
     final document = pw.Document();
     document.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat(
-          80 * PdfPageFormat.mm,
-          200 * PdfPageFormat.mm,
-        ),
+        pageFormat: receiptPageFormat,
         margin: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         build: (_) => [
           pw.Center(
@@ -85,6 +132,23 @@ class ReceiptPrintService {
       ),
     ],
   );
+
+  void _log(String message) {
+    const linePrefix = '[GO_BAROKAH_PRINT]';
+    debugPrint('$linePrefix $message');
+    developer.log(message, name: 'go_barokah.print');
+  }
+
+  void _logError(String message, Object error, StackTrace stackTrace) {
+    const linePrefix = '[GO_BAROKAH_PRINT_ERROR]';
+    debugPrint('$linePrefix $message error=$error');
+    developer.log(
+      message,
+      name: 'go_barokah.print',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
 }
 
 class ReceiptPrintException implements Exception {

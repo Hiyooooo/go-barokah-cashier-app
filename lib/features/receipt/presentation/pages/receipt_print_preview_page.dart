@@ -33,8 +33,10 @@ class ReceiptPrintPreviewPage extends ConsumerWidget {
           onRetry: () => ref.invalidate(receiptProvider(saleNumber)),
         ),
         data: (value) => PdfPreview(
+          initialPageFormat: ReceiptPrintService.receiptPageFormat,
           canChangePageFormat: false,
           canChangeOrientation: false,
+          dynamicLayout: false,
           allowPrinting: true,
           allowSharing: true,
           build: (_) => service.buildPdf(value),

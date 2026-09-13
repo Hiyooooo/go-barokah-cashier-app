@@ -63,17 +63,26 @@ class _ReceiptPageState extends ConsumerState<ReceiptPage> {
     try {
       await _printService.print(receipt);
     } on ReceiptPrintException catch (error) {
-      _showPrintError(error.message);
+      _showPrintError(error.message, receipt);
     } catch (_) {
-      _showPrintError('Printing failed. The transaction is still successful.');
+      _showPrintError(
+        'Printing failed. The transaction is still successful.',
+        receipt,
+      );
     }
   }
 
-  void _showPrintError(String message) {
+  void _showPrintError(String message, Receipt receipt) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: SnackBarAction(
+          label: 'Try again',
+          onPressed: () => _print(receipt),
+        ),
+      ),
+    );
   }
 }
 
