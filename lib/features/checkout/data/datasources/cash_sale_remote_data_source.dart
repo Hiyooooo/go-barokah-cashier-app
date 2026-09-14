@@ -19,10 +19,17 @@ class CashSaleRemoteDataSource {
       '/api/cash-sales',
       method: 'POST',
       data: {'cart_item_ids': cartItemIds, 'cash_received': cashReceived},
-      options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+      options: Options(
+        headers: {
+          'Content-Type': Headers.jsonContentType,
+          'Idempotency-Key': idempotencyKey,
+        },
+      ),
     );
     final payload = response.data!['data'];
-    final data = payload is Map<String, dynamic> ? payload : response.data!;
+    final data = payload is Map
+        ? payload.cast<String, dynamic>()
+        : response.data!;
     return CashSaleResult.fromJson(data);
   }
 }

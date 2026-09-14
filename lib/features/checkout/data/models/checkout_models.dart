@@ -43,21 +43,27 @@ class CashSaleResult {
   };
 
   factory CashSaleResult.fromJson(Map<String, dynamic> json) => CashSaleResult(
-    status: (json['status'] ?? 'COMPLETED') as String,
+    status: (json['status'] ?? 'COMPLETED').toString(),
     saleNumber: _string(json, 'sale_number', 'saleNumber'),
     transactionDate: _dateTime(
-      json['transaction_date'] ?? json['transactionDate'],
+      json['transaction_date'] ??
+          json['transactionDate'] ??
+          json['created_at'] ??
+          json['createdAt'],
     ),
     paymentMethod: _string(json, 'payment_method', 'paymentMethod'),
     cashierName: _cashierName(json),
-    items: (json['items'] as List<dynamic>? ?? const [])
-        .map((item) => CashSaleItem.fromJson(item as Map<String, dynamic>))
-        .toList(),
+    items: _items(json['items']),
     subtotal: _number(json, 'subtotal', 'subtotal'),
-    discountTotal: (json['total_discount'] ?? json['discountTotal']) as num,
-    grandTotal: (json['grand_total'] ?? json['grandTotal']) as num,
-    cashReceived: (json['cash_received'] ?? json['cashReceived']) as num,
-    changeAmount: (json['change_amount'] ?? json['changeAmount']) as num,
+    discountTotal: _number(
+      json,
+      'total_discount',
+      'discount_total',
+      fallback: 'discountTotal',
+    ),
+    grandTotal: _number(json, 'grand_total', 'grandTotal'),
+    cashReceived: _number(json, 'cash_received', 'cashReceived'),
+    changeAmount: _number(json, 'change_amount', 'changeAmount'),
     notes: json['notes'] as String?,
   );
 }
@@ -79,14 +85,29 @@ class CashSaleItem {
   final num finalUnitPrice;
   final num subtotal;
 
-  factory CashSaleItem.fromJson(Map<String, dynamic> json) => CashSaleItem(
-    productName: _string(json, 'product_name', 'productName'),
-    quantity: (json['quantity'] as num).toInt(),
-    unitPrice: (json['unit_price'] ?? json['unitPrice']) as num,
-    discount: (json['discount'] ?? json['discountAmount'] ?? 0) as num,
-    finalUnitPrice: (json['final_unit_price'] ?? json['finalUnitPrice']) as num,
-    subtotal: json['subtotal'] as num,
-  );
+  factory CashSaleItem.fromJson(Map<String, dynamic> json) {
+    final quantity = _int(json['quantity']);
+    final unitPrice = _num(json['unit_price'] ?? json['unitPrice']);
+    final subtotal = _num(json['subtotal']);
+    // ponytail: derive missing legacy unit prices; use backend field when available.
+    final finalUnitPrice =
+        _optionalNum(json['final_unit_price'] ?? json['finalUnitPrice']) ??
+        (quantity > 0 ? subtotal / quantity : unitPrice);
+
+    return CashSaleItem(
+      productName: _string(json, 'product_name', 'productName'),
+      quantity: quantity,
+      unitPrice: unitPrice,
+      discount: _num(
+        json['discount'] ??
+            json['discount_amount'] ??
+            json['discountAmount'] ??
+            0,
+      ),
+      finalUnitPrice: finalUnitPrice,
+      subtotal: subtotal,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'product_name': productName,
@@ -102,10 +123,29 @@ DateTime? _dateTime(Object? value) =>
     value is String ? DateTime.tryParse(value) : null;
 
 String _string(Map<String, dynamic> json, String snake, String camel) =>
-    (json[snake] ?? json[camel]) as String;
+    (json[snake] ?? json[camel]).toString();
 
-num _number(Map<String, dynamic> json, String snake, String camel) =>
-    (json[snake] ?? json[camel]) as num;
+num _number(
+  Map<String, dynamic> json,
+  String first,
+  String second, {
+  String? fallback,
+}) => _num(
+  json[first] ?? json[second] ?? (fallback == null ? null : json[fallback]),
+);
+
+List<CashSaleItem> _items(Object? value) => value is List
+    ? value
+          .whereType<Map>()
+          .map((item) => CashSaleItem.fromJson(item.cast<String, dynamic>()))
+          .toList()
+    : const [];
+
+num _num(Object? value) => value is num ? value : num.parse(value.toString());
+
+num? _optionalNum(Object? value) => value == null ? null : _num(value);
+
+int _int(Object? value) => _num(value).toInt();
 
 String _cashierName(Map<String, dynamic> json) {
   final cashier = json['cashier'];

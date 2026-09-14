@@ -11,7 +11,9 @@ class ReceiptRemoteDataSource {
       '/api/cash-sales/$saleNumber',
     );
     final payload = response.data!['data'];
-    final data = payload is Map<String, dynamic> ? payload : response.data!;
+    final data = payload is Map
+        ? payload.cast<String, dynamic>()
+        : response.data!;
     return Receipt.fromJson(data);
   }
 }
