@@ -14,6 +14,9 @@ final cartProvider = AsyncNotifierProvider<CartNotifier, Cart>(
 
 class CartNotifier extends AsyncNotifier<Cart> {
   final _mutatingProducts = <int>{};
+  // ponytail: serialize cart writes; parallel writes can return stale snapshots.
+  // Replace with per-item versioning only if measured throughput requires it.
+  Future<void>? _mutationQueue;
 
   bool isMutatingProduct(int productId) =>
       _mutatingProducts.contains(productId);
@@ -37,12 +40,30 @@ class CartNotifier extends AsyncNotifier<Cart> {
   Future<void> clearCart() => _mutate(_repository.clearCart);
 
   Future<void> refreshCart() async {
-    state = await AsyncValue.guard(_repository.getCart);
+    await _mutate(_repository.getCart);
   }
 
   Future<void> _mutate(Future<Cart> Function() operation) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(operation);
+    final previous = _mutationQueue;
+    final mutation = previous == null
+        ? _runMutation(operation)
+        : previous.then((_) => _runMutation(operation));
+    _mutationQueue = mutation;
+    try {
+      await mutation;
+    } finally {
+      if (identical(_mutationQueue, mutation)) _mutationQueue = null;
+    }
+  }
+
+  Future<void> _runMutation(Future<Cart> Function() operation) async {
+    final previous = state;
+    state = const AsyncLoading<Cart>().copyWithPrevious(previous);
+    try {
+      state = AsyncData(await operation()).copyWithPrevious(previous);
+    } catch (error, stackTrace) {
+      state = AsyncError<Cart>(error, stackTrace).copyWithPrevious(previous);
+    }
   }
 
   Future<void> _mutateProduct(

@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/widgets/async_state_widgets.dart';
+import '../../../../app/theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/widgets/async_state_widgets.dart';
 import '../../data/models/receipt_models.dart';
 import '../../printing/receipt_print_service.dart';
 import '../providers/receipt_provider.dart';
@@ -20,6 +21,9 @@ class ReceiptPage extends ConsumerStatefulWidget {
 
 class _ReceiptPageState extends ConsumerState<ReceiptPage> {
   final _printService = ReceiptPrintService();
+  bool _isPrinting = false;
+  bool _printFailed = false;
+  String? _printMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -29,29 +33,32 @@ class _ReceiptPageState extends ConsumerState<ReceiptPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Receipt'),
+        title: const Text('Struk transaksi'),
         actions: [
-          receipt.when(
-            loading: () => const SizedBox.shrink(),
-            error: (_, _) => const SizedBox.shrink(),
-            data: (value) => IconButton(
-              tooltip: 'Print receipt',
+          if (receipt.valueOrNull case final value?)
+            IconButton(
+              tooltip: 'Cetak struk',
               icon: const Icon(Icons.print_outlined),
-              onPressed: () => _print(value),
+              onPressed: _isPrinting ? null : () => _print(value),
             ),
-          ),
         ],
       ),
       body: receipt.when(
         loading: () => const AppLoading(),
         error: (error, _) => AppError(
-          message: userFacingError(error, fallback: 'Unable to load receipt.'),
+          message: userFacingError(
+            error,
+            fallback: 'Struk belum dapat dimuat.',
+          ),
           onRetry: () => ref.invalidate(receiptProvider(widget.saleNumber)),
           onBack: () => context.pop(),
         ),
-        data: (value) => _ReceiptPreview(
+        data: (value) => _ReceiptContent(
           receipt: value,
-          onPrint: () => _print(value),
+          isPrinting: _isPrinting,
+          printMessage: _printMessage,
+          printFailed: _printFailed,
+          onPrint: _isPrinting ? null : () => _print(value),
           onPreview: () =>
               context.push('/receipt/${widget.saleNumber}/print', extra: value),
         ),
@@ -60,102 +67,330 @@ class _ReceiptPageState extends ConsumerState<ReceiptPage> {
   }
 
   Future<void> _print(Receipt receipt) async {
+    setState(() {
+      _isPrinting = true;
+      _printFailed = false;
+      _printMessage = null;
+    });
+
     try {
       await _printService.print(receipt);
+      if (mounted) {
+        setState(() => _printMessage = 'Struk berhasil dikirim ke printer.');
+      }
     } on ReceiptPrintException catch (error) {
-      _showPrintError(error.message, receipt);
+      if (mounted) {
+        setState(() {
+          _printMessage = error.message;
+          _printFailed = true;
+        });
+      }
     } catch (_) {
-      _showPrintError(
-        'Printing failed. The transaction is still successful.',
-        receipt,
-      );
+      if (mounted) {
+        setState(() {
+          _printFailed = true;
+          _printMessage =
+              'Cetak struk gagal. Transaksi tetap berhasil dan dapat dicetak ulang.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isPrinting = false);
     }
-  }
-
-  void _showPrintError(String message, Receipt receipt) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        action: SnackBarAction(
-          label: 'Try again',
-          onPressed: () => _print(receipt),
-        ),
-      ),
-    );
   }
 }
 
-class _ReceiptPreview extends StatelessWidget {
-  const _ReceiptPreview({
+class _ReceiptContent extends StatelessWidget {
+  const _ReceiptContent({
     required this.receipt,
+    required this.isPrinting,
+    required this.printMessage,
+    required this.printFailed,
     required this.onPrint,
     required this.onPreview,
   });
 
   final Receipt receipt;
-  final VoidCallback onPrint;
+  final bool isPrinting;
+  final String? printMessage;
+  final bool printFailed;
+  final VoidCallback? onPrint;
   final VoidCallback onPreview;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(20),
-    children: [
-      Text('Go-Barokah', style: Theme.of(context).textTheme.headlineSmall),
-      Text('Sale number: ${receipt.saleNumber}'),
-      Text('Date: ${receipt.createdAt?.toLocal() ?? '-'}'),
-      Text('Cashier: ${receipt.cashierName}'),
-      Text('Payment: ${receipt.paymentMethod.toUpperCase()}'),
-      const Divider(height: 28),
-      ...receipt.items.map(
-        (item) => ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(item.productName),
-          subtitle: Text(
-            '${item.quantity} x ${formatPrice(item.unitPrice)} '
-            '→ ${formatPrice(item.finalUnitPrice)} '
-            '(discount ${item.discountAmount}%)',
-          ),
-          trailing: Text(formatPrice(item.subtotal)),
+  Widget build(BuildContext context) => SingleChildScrollView(
+    padding: const EdgeInsets.fromLTRB(
+      AppSpacing.lg,
+      AppSpacing.xxl,
+      AppSpacing.lg,
+      AppSpacing.xxxl,
+    ),
+    child: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ReceiptHeader(receipt: receipt),
+            const SizedBox(height: AppSpacing.lg),
+            _ReceiptItems(receipt: receipt),
+            const SizedBox(height: AppSpacing.lg),
+            _ReceiptTotals(receipt: receipt),
+            if (receipt.notes?.isNotEmpty == true) ...[
+              const SizedBox(height: AppSpacing.lg),
+              _ReceiptSection(title: 'Catatan', child: Text(receipt.notes!)),
+            ],
+            if (printMessage != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              _PrintNotice(message: printMessage!, isError: printFailed),
+            ],
+            const SizedBox(height: AppSpacing.xl),
+            FilledButton.icon(
+              onPressed: onPrint,
+              icon: isPrinting
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.print_outlined),
+              label: Text(
+                isPrinting
+                    ? 'Mencetak...'
+                    : printFailed
+                    ? 'Coba cetak lagi'
+                    : 'Cetak struk',
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: isPrinting ? null : onPreview,
+              icon: const Icon(Icons.preview_outlined),
+              label: const Text('Lihat pratinjau cetak'),
+            ),
+          ],
         ),
       ),
-      const Divider(height: 28),
-      _ReceiptRow(label: 'Subtotal', value: receipt.subtotal),
-      _ReceiptRow(label: 'Total discount', value: receipt.discountTotal),
-      _ReceiptRow(label: 'Grand total', value: receipt.grandTotal),
-      _ReceiptRow(label: 'Cash received', value: receipt.cashReceived),
-      _ReceiptRow(label: 'Change', value: receipt.changeAmount),
-      if (receipt.notes?.isNotEmpty == true) ...[
-        const SizedBox(height: 16),
-        Text('Notes: ${receipt.notes}'),
-      ],
-      const SizedBox(height: 20),
-      FilledButton.icon(
-        onPressed: onPrint,
-        icon: const Icon(Icons.print),
-        label: const Text('Print receipt'),
+    ),
+  );
+}
+
+class _ReceiptHeader extends StatelessWidget {
+  const _ReceiptHeader({required this.receipt});
+
+  final Receipt receipt;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.xxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Go-Barokah', style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: AppSpacing.lg),
+          _ReceiptMeta(label: 'Nomor transaksi', value: receipt.saleNumber),
+          _ReceiptMeta(
+            label: 'Tanggal',
+            value: formatDateTime(receipt.createdAt),
+          ),
+          _ReceiptMeta(label: 'Kasir', value: _orDash(receipt.cashierName)),
+          _ReceiptMeta(
+            label: 'Pembayaran',
+            value: receipt.paymentMethod.toUpperCase(),
+          ),
+        ],
       ),
-      OutlinedButton.icon(
-        onPressed: onPreview,
-        icon: const Icon(Icons.preview),
-        label: const Text('Open print preview'),
+    ),
+  );
+}
+
+class _ReceiptItems extends StatelessWidget {
+  const _ReceiptItems({required this.receipt});
+
+  final Receipt receipt;
+
+  @override
+  Widget build(BuildContext context) => _ReceiptSection(
+    title: 'Item belanja',
+    child: Column(
+      children: [
+        for (final item in receipt.items) ...[
+          _ReceiptItem(item: item),
+          if (item != receipt.items.last) const Divider(height: AppSpacing.xxl),
+        ],
+        if (receipt.items.isEmpty)
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Tidak ada item pada struk.'),
+          ),
+      ],
+    ),
+  );
+}
+
+class _ReceiptItem extends StatelessWidget {
+  const _ReceiptItem({required this.item});
+
+  final ReceiptItem item;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(item.productName, style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: AppSpacing.xs),
+      Text(
+        '${item.quantity} x ${formatPrice(item.finalUnitPrice)}',
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+      if (item.discountAmount > 0)
+        Text(
+          'Harga normal ${formatPrice(item.unitPrice)}. Diskon ${item.discountAmount}%.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      const SizedBox(height: AppSpacing.xs),
+      Align(
+        alignment: Alignment.centerRight,
+        child: Text(
+          formatPrice(item.subtotal),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(color: AppColors.forestGreen),
+        ),
       ),
     ],
   );
 }
 
-class _ReceiptRow extends StatelessWidget {
-  const _ReceiptRow({required this.label, required this.value});
+class _ReceiptTotals extends StatelessWidget {
+  const _ReceiptTotals({required this.receipt});
 
-  final String label;
-  final num value;
+  final Receipt receipt;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text(label), Text(formatPrice(value))],
+  Widget build(BuildContext context) => _ReceiptSection(
+    title: 'Ringkasan pembayaran',
+    child: Column(
+      children: [
+        _ReceiptRow(label: 'Subtotal', value: receipt.subtotal),
+        _ReceiptRow(label: 'Total diskon', value: receipt.discountTotal),
+        const Divider(height: AppSpacing.xxl),
+        _ReceiptRow(
+          label: 'Total',
+          value: receipt.grandTotal,
+          emphasized: true,
+        ),
+        _ReceiptRow(label: 'Uang diterima', value: receipt.cashReceived),
+        _ReceiptRow(label: 'Kembalian', value: receipt.changeAmount),
+      ],
     ),
   );
 }
+
+class _ReceiptSection extends StatelessWidget {
+  const _ReceiptSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.xxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: AppSpacing.lg),
+          child,
+        ],
+      ),
+    ),
+  );
+}
+
+class _ReceiptMeta extends StatelessWidget {
+  const _ReceiptMeta({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 132,
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
+        Expanded(child: Text(value)),
+      ],
+    ),
+  );
+}
+
+class _ReceiptRow extends StatelessWidget {
+  const _ReceiptRow({
+    required this.label,
+    required this.value,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final num value;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
+        ),
+        Text(
+          formatPrice(value),
+          style: emphasized
+              ? Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(color: AppColors.forestGreen)
+              : null,
+        ),
+      ],
+    ),
+  );
+}
+
+class _PrintNotice extends StatelessWidget {
+  const _PrintNotice({required this.message, required this.isError});
+
+  final String message;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isError ? AppColors.error : AppColors.forestGreen;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(AppRadius.badge),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.check_circle_outline,
+            color: color,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text(message)),
+        ],
+      ),
+    );
+  }
+}
+
+String _orDash(String value) => value.trim().isEmpty ? '-' : value;
