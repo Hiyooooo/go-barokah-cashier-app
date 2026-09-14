@@ -47,7 +47,10 @@ class CashSaleHistoryNotifier extends AsyncNotifier<CashSaleHistoryResponse> {
     this.endDate = endDate;
     page = 1;
     final requestVersion = ++_requestVersion;
-    state = const AsyncLoading();
+    final previous = state;
+    state = const AsyncLoading<CashSaleHistoryResponse>().copyWithPrevious(
+      previous,
+    );
     final nextState = await AsyncValue.guard(
       () => _load(
         requestedPage: page,
@@ -62,7 +65,10 @@ class CashSaleHistoryNotifier extends AsyncNotifier<CashSaleHistoryResponse> {
     if (page < 1 || page == this.page) return;
     this.page = page;
     final requestVersion = ++_requestVersion;
-    state = const AsyncLoading();
+    final previous = state;
+    state = const AsyncLoading<CashSaleHistoryResponse>().copyWithPrevious(
+      previous,
+    );
     final nextState = await AsyncValue.guard(
       () => _load(
         requestedPage: page,
