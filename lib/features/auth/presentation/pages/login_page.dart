@@ -21,6 +21,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _passwordFocusNode = FocusNode();
 
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -32,6 +33,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting || ref.read(authProvider).isLoading) return;
+
     if (!_formKey.currentState!.validate()) {
       if (!_isValidEmail(_emailController.text)) {
         _emailFocusNode.requestFocus();
@@ -42,12 +45,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
 
     FocusManager.instance.primaryFocus?.unfocus();
-    await ref
-        .read(authProvider.notifier)
-        .login(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
+    setState(() => _isSubmitting = true);
+    try {
+      await ref
+          .read(authProvider.notifier)
+          .login(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   bool _isValidEmail(String? value) {
@@ -61,7 +69,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final sessionExpired =
         GoRouterState.of(context).uri.queryParameters['reason'] ==
         'session_expired';
-    final isLoading = auth.isLoading;
+    final isSubmitting = _isSubmitting || auth.isLoading;
     final errorMessage = auth.hasError
         ? userFacingError(
             auth.error!,
@@ -73,82 +81,112 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final isWideTablet = constraints.maxWidth >= 900;
-            if (isWideTablet) {
+            final isTablet = constraints.maxWidth >= 900;
+            final form = _LoginFormArea(
+              formKey: _formKey,
+              emailController: _emailController,
+              passwordController: _passwordController,
+              emailFocusNode: _emailFocusNode,
+              passwordFocusNode: _passwordFocusNode,
+              obscurePassword: _obscurePassword,
+              isSubmitting: isSubmitting,
+              sessionExpired: sessionExpired,
+              errorMessage: errorMessage,
+              showBrandHeader: !isTablet,
+              onTogglePassword: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+              onSubmit: _submit,
+            );
+
+            if (isTablet) {
               return Row(
                 children: [
-                  const Expanded(child: _LoginBrandPanel()),
-                  Expanded(
-                    child: _buildFormArea(
-                      context,
-                      constraints,
-                      isLoading: isLoading,
-                      sessionExpired: sessionExpired,
-                      errorMessage: errorMessage,
-                    ),
-                  ),
+                  const Expanded(flex: 5, child: _LoginBrandPanel()),
+                  Expanded(flex: 6, child: form),
                 ],
               );
             }
 
-            return _buildFormArea(
-              context,
-              constraints,
-              isLoading: isLoading,
-              sessionExpired: sessionExpired,
-              errorMessage: errorMessage,
-            );
+            return form;
           },
         ),
       ),
     );
   }
+}
 
-  Widget _buildFormArea(
-    BuildContext context,
-    BoxConstraints constraints, {
-    required bool isLoading,
-    required bool sessionExpired,
-    required String? errorMessage,
-  }) {
+class _LoginFormArea extends StatelessWidget {
+  const _LoginFormArea({
+    required this.formKey,
+    required this.emailController,
+    required this.passwordController,
+    required this.emailFocusNode,
+    required this.passwordFocusNode,
+    required this.obscurePassword,
+    required this.isSubmitting,
+    required this.sessionExpired,
+    required this.errorMessage,
+    required this.showBrandHeader,
+    required this.onTogglePassword,
+    required this.onSubmit,
+  });
+
+  final GlobalKey<FormState> formKey;
+  final TextEditingController emailController;
+  final TextEditingController passwordController;
+  final FocusNode emailFocusNode;
+  final FocusNode passwordFocusNode;
+  final bool obscurePassword;
+  final bool isSubmitting;
+  final bool sessionExpired;
+  final String? errorMessage;
+  final bool showBrandHeader;
+  final VoidCallback onTogglePassword;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final constraints = BoxConstraints.loose(MediaQuery.sizeOf(context));
     final horizontalPadding = constraints.maxWidth >= 600
         ? AppSpacing.xxxl
         : AppSpacing.xxl;
 
     return SingleChildScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.symmetric(
-        horizontal: horizontalPadding,
-        vertical: AppSpacing.xxxl,
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        AppSpacing.xxxl,
+        horizontalPadding,
+        AppSpacing.xxl,
       ),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: AutofillGroup(
             child: Form(
-              key: _formKey,
+              key: formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (constraints.maxWidth < 900) ...[
+                  if (showBrandHeader) ...[
                     const _LoginBrandHeader(),
-                    const SizedBox(height: AppSpacing.xxxl),
+                    const SizedBox(height: AppSpacing.section),
                   ],
                   Text(
-                    'Mulai transaksi baru dengan cepat.',
+                    'Masuk untuk mulai berjualan.',
                     style: Theme.of(context).textTheme.headlineLarge,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Masuk untuk melanjutkan ke katalog dan keranjang.',
+                    'Akses katalog, keranjang, dan transaksi tunai dari akun kasir Anda.',
                     style: Theme.of(
                       context,
                     ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
                   ),
                   const SizedBox(height: AppSpacing.xxxl),
                   TextFormField(
-                    controller: _emailController,
-                    focusNode: _emailFocusNode,
+                    controller: emailController,
+                    focusNode: emailFocusNode,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     autofillHints: const [
@@ -158,6 +196,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     style: Theme.of(context).textTheme.bodyLarge,
                     decoration: const InputDecoration(
                       labelText: 'Email',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      hintText: 'nama@contoh.com',
                       prefixIcon: Icon(Icons.alternate_email_outlined),
                     ),
                     validator: (value) {
@@ -169,28 +209,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       }
                       return null;
                     },
-                    onFieldSubmitted: (_) => _passwordFocusNode.requestFocus(),
+                    onFieldSubmitted: (_) => passwordFocusNode.requestFocus(),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.xl),
                   TextFormField(
-                    controller: _passwordController,
-                    focusNode: _passwordFocusNode,
-                    obscureText: _obscurePassword,
+                    controller: passwordController,
+                    focusNode: passwordFocusNode,
+                    obscureText: obscurePassword,
                     textInputAction: TextInputAction.done,
                     autofillHints: const [AutofillHints.password],
                     style: Theme.of(context).textTheme.bodyLarge,
                     decoration: InputDecoration(
                       labelText: 'Password',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      hintText: 'Masukkan password Anda',
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
-                        onPressed: () {
-                          setState(() => _obscurePassword = !_obscurePassword);
-                        },
-                        tooltip: _obscurePassword
+                        onPressed: onTogglePassword,
+                        tooltip: obscurePassword
                             ? 'Tampilkan password'
                             : 'Sembunyikan password',
                         icon: Icon(
-                          _obscurePassword
+                          obscurePassword
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined,
                         ),
@@ -200,7 +240,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ? 'Password wajib diisi.'
                         : null,
                     onFieldSubmitted: (_) {
-                      if (!isLoading) _submit();
+                      if (!isSubmitting) onSubmit();
                     },
                   ),
                   if (sessionExpired) ...[
@@ -216,16 +256,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     const SizedBox(height: AppSpacing.lg),
                     _LoginMessage(
                       icon: Icons.error_outline,
-                      message: errorMessage,
+                      message: errorMessage!,
                     ),
                   ],
                   const SizedBox(height: AppSpacing.xxl),
                   FilledButton(
-                    onPressed: isLoading ? null : _submit,
+                    onPressed: isSubmitting ? null : onSubmit,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (isLoading) ...[
+                        if (isSubmitting) ...[
                           const SizedBox.square(
                             dimension: 18,
                             child: CircularProgressIndicator(
@@ -236,17 +276,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(width: AppSpacing.sm),
                         ],
                         Text(
-                          isLoading ? 'Memproses masuk...' : 'Masuk ke akun',
+                          isSubmitting ? 'Memproses masuk...' : 'Masuk ke akun',
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xxl),
-                  Text(
-                    'Akses khusus cashier UD. Barokah.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  const _LoginTrustLine(),
                 ],
               ),
             ),
@@ -255,31 +291,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ),
     );
   }
+
+  bool _isValidEmail(String? value) {
+    final email = value?.trim() ?? '';
+    return email.isNotEmpty && email.contains('@') && email.contains('.');
+  }
 }
 
 class _LoginBrandHeader extends StatelessWidget {
   const _LoginBrandHeader();
 
   @override
-  Widget build(BuildContext context) => const Row(
+  Widget build(BuildContext context) => Row(
     children: [
-      _LoginBrandMark(),
-      SizedBox(width: AppSpacing.md),
+      const _LoginBrandMark(size: 48),
+      const SizedBox(width: AppSpacing.md),
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Go-Barokah',
-            style: TextStyle(
-              color: AppColors.forestGreen,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            'Kasir',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-          ),
+          Text('Go-Barokah', style: Theme.of(context).textTheme.titleLarge),
+          Text('Area kasir', style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     ],
@@ -292,55 +323,67 @@ class _LoginBrandPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: AppColors.cream,
-    child: Padding(
+    child: SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.huge),
-      child: Align(
-        alignment: Alignment.center,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 520, maxWidth: 380),
+        child: IntrinsicHeight(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _LoginBrandMark(size: 64),
-              const SizedBox(height: AppSpacing.xxl),
+              const _LoginBrandMark(size: 56),
+              const Spacer(),
               Text(
                 'Go-Barokah',
                 style: Theme.of(context).textTheme.displayLarge?.copyWith(
                   color: AppColors.forestGreen,
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: AppSpacing.md),
               Text(
-                'Kasir yang ringkas untuk menjaga setiap transaksi tetap jelas.',
+                'Katalog, keranjang, dan transaksi tunai dalam satu tempat.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodyLarge?.copyWith(color: AppColors.textBody),
               ),
               const SizedBox(height: AppSpacing.xxxl),
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: AppColors.forestGreen,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    'Siap membantu proses penjualan Anda.',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: AppColors.textBody),
-                  ),
-                ],
+              const _LoginTrustLine(),
+              const Spacer(),
+              Text(
+                'Akses khusus untuk akun cashier UD. Barokah.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textBody),
               ),
             ],
           ),
         ),
       ),
+    ),
+  );
+}
+
+class _LoginTrustLine extends StatelessWidget {
+  const _LoginTrustLine();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Akses untuk operasional kasir Go-Barokah',
+    child: Row(
+      children: [
+        const Icon(
+          Icons.verified_user_outlined,
+          size: 18,
+          color: AppColors.warmBrown,
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            'Siap membantu operasional kasir Anda.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
     ),
   );
 }
@@ -351,17 +394,21 @@ class _LoginBrandMark extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      color: AppColors.forestGreen,
-      borderRadius: BorderRadius.circular(size * 0.28),
-    ),
-    child: Icon(
-      Icons.storefront_outlined,
-      color: AppColors.surface,
-      size: size * 0.52,
+  Widget build(BuildContext context) => Semantics(
+    label: 'Logo Go-Barokah',
+    image: true,
+    child: Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.forestGreen,
+        borderRadius: BorderRadius.circular(size * 0.28),
+      ),
+      child: Icon(
+        Icons.storefront_outlined,
+        color: AppColors.surface,
+        size: size * 0.52,
+      ),
     ),
   );
 }

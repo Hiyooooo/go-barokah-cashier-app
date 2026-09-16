@@ -237,28 +237,48 @@ class _SearchField extends StatelessWidget {
   final VoidCallback onSearch;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: TextField(
-          controller: controller,
-          onChanged: onChanged,
-          onSubmitted: onSubmitted,
-          textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
-            labelText: 'Cari produk',
-            hintText: 'Cari berdasarkan nama produk',
-            prefixIcon: Icon(Icons.search),
-          ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final field = TextField(
+        controller: controller,
+        onChanged: onChanged,
+        onSubmitted: onSubmitted,
+        textInputAction: TextInputAction.search,
+        decoration: const InputDecoration(
+          labelText: 'Cari produk',
+          hintText: 'Nama produk',
+          prefixIcon: Icon(Icons.search),
         ),
-      ),
-      const SizedBox(width: AppSpacing.sm),
-      IconButton.filled(
-        onPressed: onSearch,
-        tooltip: 'Cari produk',
-        icon: const Icon(Icons.arrow_forward),
-      ),
-    ],
+      );
+      final action = constraints.maxWidth < 420
+          ? FilledButton.icon(
+              onPressed: onSearch,
+              icon: const Icon(Icons.search),
+              label: const Text('Cari produk'),
+            )
+          : IconButton.filled(
+              onPressed: onSearch,
+              tooltip: 'Cari produk',
+              icon: const Icon(Icons.arrow_forward),
+            );
+
+      return constraints.maxWidth < 420
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                field,
+                const SizedBox(height: AppSpacing.sm),
+                action,
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: AppSpacing.sm),
+                action,
+              ],
+            );
+    },
   );
 }
 
@@ -288,6 +308,17 @@ class _CategoryFilters extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            const Icon(Icons.tune, size: 18, color: AppColors.textMuted),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              'Saring katalog',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
@@ -295,7 +326,6 @@ class _CategoryFilters extends StatelessWidget {
           children: [
             OutlinedButton.icon(
               onPressed: onSelect,
-              icon: const Icon(Icons.tune),
               label: Text(
                 selectedIds.isEmpty
                     ? 'Semua kategori'
@@ -587,9 +617,9 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.sm),
                     _ProductPrice(product: product),
-                    const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.lg),
                     _StockStatus(product: product),
                     if (product.minOrderQuantity case final minimum?
                         when minimum > 1) ...[
@@ -701,13 +731,17 @@ class _ProductPrice extends StatelessWidget {
       children: [
         Text(
           formatPrice(finalPrice),
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(color: AppColors.forestGreen),
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            color: AppColors.forestGreen,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         if (hasDiscount) ...[
           const SizedBox(height: AppSpacing.xs),
-          Row(
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 formatPrice(product.price),
@@ -716,7 +750,6 @@ class _ProductPrice extends StatelessWidget {
                   decoration: TextDecoration.lineThrough,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
               Text(
                 'Diskon ${product.discountAmount!.toStringAsFixed(0)}%',
                 style: Theme.of(
@@ -739,30 +772,33 @@ class _StockStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = _status(product);
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: status.background,
-        borderRadius: BorderRadius.circular(AppRadius.badge),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(status.icon, size: 17, color: status.foreground),
-          const SizedBox(width: AppSpacing.sm),
-          Flexible(
-            child: Text(
-              status.label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: status.foreground,
-                fontWeight: FontWeight.w600,
+    return Semantics(
+      label: 'Status stok: ${status.label}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: status.background,
+          borderRadius: BorderRadius.circular(AppRadius.badge),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(status.icon, size: 17, color: status.foreground),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(
+              child: Text(
+                status.label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: status.foreground,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

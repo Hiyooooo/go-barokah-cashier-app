@@ -4,7 +4,7 @@ import '../network/api_client.dart';
 
 String userFacingError(
   Object error, {
-  String fallback = 'Something went wrong.',
+  String fallback = 'Terjadi kendala. Coba lagi.',
 }) {
   if (error is ApiException) {
     final parts = <String>[];
@@ -62,15 +62,17 @@ class AppError extends StatelessWidget {
         Text(
           message,
           textAlign: TextAlign.center,
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.error,
+          ),
         ),
         if (onRetry != null) ...[
-          const SizedBox(height: 12),
-          OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
+          const SizedBox(height: 16),
+          OutlinedButton(onPressed: onRetry, child: const Text('Coba lagi')),
         ],
         if (onBack != null) ...[
           const SizedBox(height: 8),
-          TextButton(onPressed: onBack, child: const Text('Go back')),
+          TextButton(onPressed: onBack, child: const Text('Kembali')),
         ],
       ],
     ),

@@ -106,6 +106,7 @@ ThemeData _buildAppTheme() {
     colorScheme: colorScheme,
     scaffoldBackgroundColor: AppColors.canvas,
     textTheme: textTheme,
+    fontFamily: 'sans-serif',
     visualDensity: VisualDensity.standard,
     dividerTheme: const DividerThemeData(
       color: AppColors.borderSubtle,
@@ -174,9 +175,19 @@ ThemeData _buildAppTheme() {
             borderRadius: BorderRadius.circular(AppRadius.button),
           ),
         ),
-        side: const WidgetStatePropertyAll(BorderSide(color: AppColors.border)),
+        side: WidgetStateProperty.resolveWith((states) {
+          return BorderSide(
+            color: states.contains(WidgetState.disabled)
+                ? AppColors.borderSubtle
+                : AppColors.border,
+          );
+        }),
         textStyle: WidgetStatePropertyAll(textTheme.labelLarge),
-        foregroundColor: const WidgetStatePropertyAll(AppColors.forestGreen),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.disabled)
+              ? AppColors.textMuted
+              : AppColors.forestGreen;
+        }),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -186,7 +197,21 @@ ThemeData _buildAppTheme() {
           EdgeInsets.symmetric(horizontal: AppSpacing.md),
         ),
         textStyle: WidgetStatePropertyAll(textTheme.labelLarge),
-        foregroundColor: const WidgetStatePropertyAll(AppColors.forestGreen),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.disabled)
+              ? AppColors.textMuted
+              : AppColors.forestGreen;
+        }),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll(Size.square(48)),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.disabled)
+              ? AppColors.textMuted
+              : AppColors.textHeading;
+        }),
       ),
     ),
     cardTheme: CardThemeData(
@@ -247,6 +272,14 @@ ThemeData _buildAppTheme() {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
+    ),
+    tooltipTheme: TooltipThemeData(
+      waitDuration: const Duration(milliseconds: 400),
+      decoration: BoxDecoration(
+        color: AppColors.textStrong,
+        borderRadius: BorderRadius.circular(AppRadius.input),
+      ),
+      textStyle: textTheme.bodySmall?.copyWith(color: AppColors.surface),
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
       color: AppColors.forestGreen,
