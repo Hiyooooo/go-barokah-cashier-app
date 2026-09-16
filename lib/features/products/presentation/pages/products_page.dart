@@ -8,6 +8,8 @@ import '../../../../app/theme.dart';
 import '../../../../core/constants/app_config.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/async_state_widgets.dart';
+import '../../../cart/data/models/cart_models.dart';
+import '../../../cart/presentation/pages/cart_page.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../data/models/product_models.dart';
 import '../providers/product_provider.dart';
@@ -124,101 +126,185 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     await _search();
   }
 
+  Future<void> _refreshProducts() => ref.refresh(productCatalogProvider.future);
+
   @override
   Widget build(BuildContext context) {
     final products = ref.watch(productCatalogProvider);
     final categories = ref.watch(productCategoriesProvider);
 
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () => ref.refresh(productCatalogProvider.future),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final horizontalPadding = constraints.maxWidth >= 720
-                ? AppSpacing.xxxl
-                : AppSpacing.lg;
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final showPersistentCart =
+              MediaQuery.orientationOf(context) == Orientation.landscape &&
+              constraints.maxWidth >= 900;
+          final browser = _ProductsBrowser(
+            products: products,
+            categories: categories,
+            searchController: _searchController,
+            selectedCategoryIds: _categoryIds,
+            hasActiveFilters: _hasActiveFilters,
+            onSearchChanged: (_) => setState(() {}),
+            onSearchSubmitted: (_) => _search(),
+            onSearch: _search,
+            onRefresh: _refreshProducts,
+            onRetry: () {
+              unawaited(ref.refresh(productCatalogProvider.future));
+            },
+            onSelectCategories: _selectCategories,
+            onRemoveCategory: _removeCategory,
+            onResetFilters: _resetFilters,
+          );
 
-            return ListView(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                AppSpacing.xxl,
-                horizontalPadding,
-                AppSpacing.xxxl,
+          if (!showPersistentCart) return browser;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: browser),
+              const VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: AppColors.border,
               ),
-              children: [
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1200),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Produk',
-                          style: Theme.of(context).textTheme.headlineMedium,
+              const SizedBox(width: 320, child: CartPanel()),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ProductsBrowser extends StatelessWidget {
+  const _ProductsBrowser({
+    required this.products,
+    required this.categories,
+    required this.searchController,
+    required this.selectedCategoryIds,
+    required this.hasActiveFilters,
+    required this.onSearchChanged,
+    required this.onSearchSubmitted,
+    required this.onSearch,
+    required this.onRefresh,
+    required this.onRetry,
+    required this.onSelectCategories,
+    required this.onRemoveCategory,
+    required this.onResetFilters,
+  });
+
+  final AsyncValue<ProductPage> products;
+  final AsyncValue<List<ProductCategory>> categories;
+  final TextEditingController searchController;
+  final Set<int> selectedCategoryIds;
+  final bool hasActiveFilters;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onSearchSubmitted;
+  final VoidCallback onSearch;
+  final Future<void> Function() onRefresh;
+  final VoidCallback onRetry;
+  final ValueChanged<List<ProductCategory>> onSelectCategories;
+  final ValueChanged<int> onRemoveCategory;
+  final VoidCallback onResetFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalPadding = constraints.maxWidth >= 720
+            ? AppSpacing.xxxl
+            : AppSpacing.lg;
+
+        return RefreshIndicator(
+          onRefresh: onRefresh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              AppSpacing.xxl,
+              horizontalPadding,
+              AppSpacing.xxxl,
+            ),
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Produk',
+                        style: Theme.of(context).textTheme.headlineLarge,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Pilih produk untuk memulai transaksi baru.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textMuted,
                         ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          'Pilih produk untuk memulai transaksi baru.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: AppColors.textMuted),
+                      ),
+                      const SizedBox(height: AppSpacing.xxl),
+                      _SearchField(
+                        controller: searchController,
+                        onChanged: onSearchChanged,
+                        onSubmitted: onSearchSubmitted,
+                        onSearch: onSearch,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      categories.when(
+                        loading: () => const ClipRRect(
+                          borderRadius: BorderRadius.all(
+                            Radius.circular(AppRadius.badge),
+                          ),
+                          child: LinearProgressIndicator(minHeight: 3),
                         ),
-                        const SizedBox(height: AppSpacing.xxl),
-                        _SearchField(
-                          controller: _searchController,
-                          onChanged: (_) => setState(() {}),
-                          onSubmitted: (_) => _search(),
-                          onSearch: _search,
+                        error: (_, _) => const _CategoryUnavailable(),
+                        data: (items) => _CategoryFilters(
+                          categories: items,
+                          selectedIds: selectedCategoryIds,
+                          hasActiveFilters: hasActiveFilters,
+                          onSelect: () => onSelectCategories(items),
+                          onRemove: onRemoveCategory,
+                          onReset: onResetFilters,
                         ),
-                        const SizedBox(height: AppSpacing.md),
-                        categories.when(
-                          loading: () => const ClipRRect(
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(AppRadius.badge),
-                            ),
-                            child: LinearProgressIndicator(minHeight: 3),
+                      ),
+                      const SizedBox(height: AppSpacing.xxl),
+                      if (products.isRefreshing) ...[
+                        const ClipRRect(
+                          borderRadius: BorderRadius.all(
+                            Radius.circular(AppRadius.badge),
                           ),
-                          error: (_, _) => const _CategoryUnavailable(),
-                          data: (items) => _CategoryFilters(
-                            categories: items,
-                            selectedIds: _categoryIds,
-                            hasActiveFilters: _hasActiveFilters,
-                            onSelect: () => _selectCategories(items),
-                            onRemove: _removeCategory,
-                            onReset: _resetFilters,
-                          ),
+                          child: LinearProgressIndicator(minHeight: 3),
                         ),
-                        const SizedBox(height: AppSpacing.xxl),
-                        products.when(
-                          loading: () => const Padding(
-                            padding: EdgeInsets.all(AppSpacing.section),
-                            child: AppLoading(),
-                          ),
-                          error: (error, _) => AppError(
-                            message: userFacingError(
-                              error,
-                              fallback: 'Produk belum dapat dimuat. Coba lagi.',
-                            ),
-                            onRetry: () {
-                              unawaited(
-                                ref.refresh(productCatalogProvider.future),
-                              );
-                            },
-                          ),
-                          data: (page) => _ProductResults(
-                            page: page,
-                            hasActiveFilters: _hasActiveFilters,
-                            onResetFilters: _resetFilters,
-                          ),
-                        ),
+                        const SizedBox(height: AppSpacing.lg),
                       ],
-                    ),
+                      products.when(
+                        loading: () => const Padding(
+                          padding: EdgeInsets.all(AppSpacing.section),
+                          child: AppLoading(),
+                        ),
+                        error: (error, _) => AppError(
+                          message: userFacingError(
+                            error,
+                            fallback: 'Produk belum dapat dimuat. Coba lagi.',
+                          ),
+                          onRetry: onRetry,
+                        ),
+                        data: (page) => _ProductResults(
+                          page: page,
+                          hasActiveFilters: hasActiveFilters,
+                          onResetFilters: onResetFilters,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            );
-          },
-        ),
-      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -552,40 +638,53 @@ class _ProductCard extends ConsumerStatefulWidget {
 }
 
 class _ProductCardState extends ConsumerState<_ProductCard> {
-  bool _isAdding = false;
-
   Future<void> _addToCart() async {
-    if (_isAdding) return;
-    setState(() => _isAdding = true);
+    final cartNotifier = ref.read(cartProvider.notifier);
+    if (cartNotifier.isMutatingProduct(widget.product.id)) return;
 
-    try {
-      await ref
-          .read(cartProvider.notifier)
-          .addItem(
-            widget.product.id,
-            quantity: widget.product.minOrderQuantity ?? 1,
-          );
-      if (!mounted) return;
+    await cartNotifier.addItem(widget.product.id, quantity: 1);
+    if (!mounted) return;
 
-      final cart = ref.read(cartProvider);
-      final message = cart.hasError
-          ? userFacingError(
-              cart.error!,
+    final cartState = ref.read(cartProvider);
+    final cart = cartState.valueOrNull;
+    if (cartState.hasError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userFacingError(
+              cartState.error!,
               fallback: 'Produk belum dapat ditambahkan ke keranjang.',
-            )
-          : '${widget.product.name} ditambahkan ke keranjang.';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } finally {
-      if (mounted) setState(() => _isAdding = false);
+            ),
+          ),
+        ),
+      );
+      return;
     }
+    final confirmedQuantity = cart == null
+        ? null
+        : _quantityForProduct(cart, widget.product.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          confirmedQuantity == null
+              ? '${widget.product.name} belum dapat ditambahkan.'
+              : '${widget.product.name} ditambahkan. Jumlah terkonfirmasi: $confirmedQuantity.',
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final product = widget.product;
     final canAdd = product.isActive && product.stock > 0;
+    final cartState = ref.watch(cartProvider);
+    final cartNotifier = ref.read(cartProvider.notifier);
+    final isAdding = cartNotifier.isMutatingProduct(product.id);
+    final confirmedQuantity = _quantityForProduct(
+      cartState.valueOrNull,
+      product.id,
+    );
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -593,16 +692,29 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Semantics(
-            button: true,
-            label: 'Lihat detail produk ${product.name}',
+            button: canAdd,
+            enabled: canAdd && !isAdding,
+            label: canAdd
+                ? 'Tambah satu ${product.name} ke keranjang'
+                : 'Produk ${product.name} tidak tersedia',
             child: InkWell(
-              onTap: () => context.push('/products/${product.id}'),
+              onTap: canAdd && !isAdding ? _addToCart : null,
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _ProductImage(product: product),
+                    Stack(
+                      children: [
+                        _ProductImage(product: product),
+                        if (confirmedQuantity != null)
+                          Positioned(
+                            top: AppSpacing.sm,
+                            right: AppSpacing.sm,
+                            child: _QuantityBadge(quantity: confirmedQuantity),
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: AppSpacing.lg),
                     if (product.category case final category?)
                       Text(
@@ -621,12 +733,33 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                     _ProductPrice(product: product),
                     const SizedBox(height: AppSpacing.lg),
                     _StockStatus(product: product),
-                    if (product.minOrderQuantity case final minimum?
-                        when minimum > 1) ...[
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        'Minimum pembelian: $minimum',
-                        style: Theme.of(context).textTheme.bodySmall,
+                    if (canAdd) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          Icon(
+                            isAdding
+                                ? Icons.hourglass_top_outlined
+                                : Icons.touch_app_outlined,
+                            size: 18,
+                            color: AppColors.forestGreen,
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              isAdding
+                                  ? 'Menambahkan...'
+                                  : 'Ketuk untuk tambah 1',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppColors.forestGreen),
+                            ),
+                          ),
+                          if (isAdding)
+                            const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
                       ),
                     ],
                   ],
@@ -641,29 +774,50 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               AppSpacing.lg,
               AppSpacing.lg,
             ),
-            child: canAdd
-                ? FilledButton.tonalIcon(
-                    onPressed: _isAdding ? null : _addToCart,
-                    icon: _isAdding
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.add_shopping_cart),
-                    label: Text(
-                      _isAdding ? 'Menambahkan...' : 'Tambah ke keranjang',
-                    ),
-                  )
-                : OutlinedButton.icon(
-                    onPressed: null,
-                    icon: const Icon(Icons.block_outlined),
-                    label: const Text('Tidak tersedia'),
-                  ),
+            child: OutlinedButton.icon(
+              onPressed: () => context.push('/products/${product.id}'),
+              icon: const Icon(Icons.info_outline),
+              label: const Text('Lihat detail'),
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+class _QuantityBadge extends StatelessWidget {
+  const _QuantityBadge({required this.quantity});
+
+  final int quantity;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Jumlah di keranjang: $quantity',
+    child: Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.forestGreen,
+        borderRadius: BorderRadius.circular(AppRadius.badge),
+      ),
+      child: Text(
+        '$quantity',
+        style: Theme.of(
+          context,
+        ).textTheme.labelLarge?.copyWith(color: AppColors.surface),
+      ),
+    ),
+  );
+}
+
+int? _quantityForProduct(Cart? cart, int productId) {
+  for (final item in cart?.items ?? const <CartItem>[]) {
+    if (item.productId == productId) return item.quantity;
+  }
+  return null;
 }
 
 class _ProductImage extends StatelessWidget {

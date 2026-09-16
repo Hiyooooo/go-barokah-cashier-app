@@ -72,6 +72,135 @@ class CartPage extends ConsumerWidget {
   }
 }
 
+class CartPanel extends ConsumerWidget {
+  const CartPanel({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cartState = ref.watch(cartProvider);
+    final cart = cartState.valueOrNull;
+
+    Widget content;
+    if (cart != null) {
+      content = _CartPanelContent(cart: cart, cartState: cartState);
+    } else {
+      content = cartState.when(
+        loading: () => const AppLoading(),
+        error: (error, _) => AppError(
+          message: userFacingError(
+            error,
+            fallback: 'Keranjang belum dapat dimuat.',
+          ),
+          onRetry: () => ref.invalidate(cartProvider),
+        ),
+        data: (value) => _CartPanelContent(cart: value, cartState: cartState),
+      );
+    }
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: AppColors.surface),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.xxl,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: AppColors.borderSubtle),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.shopping_basket_outlined,
+                    size: 20,
+                    color: AppColors.forestGreen,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Keranjang aktif',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          cart == null
+                              ? 'Memuat isi keranjang'
+                              : '${cart.summary.itemsCount} jenis produk',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Expanded(child: content),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CartPanelContent extends ConsumerWidget {
+  const _CartPanelContent({required this.cart, required this.cartState});
+
+  final Cart cart;
+  final AsyncValue<Cart> cartState;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (cart.items.isEmpty) {
+      return _EmptyCart(onBrowse: () => context.go('/products'));
+    }
+
+    final mutationInProgress = cartState.isLoading;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (cartState.isRefreshing) ...[
+          const ClipRRect(
+            borderRadius: BorderRadius.all(Radius.circular(AppRadius.badge)),
+            child: LinearProgressIndicator(minHeight: 3),
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+        if (cartState.hasError) ...[
+          _CartMutationError(error: cartState.error!),
+          const SizedBox(height: AppSpacing.md),
+        ],
+        Expanded(
+          child: Scrollbar(
+            child: ListView.separated(
+              padding: const EdgeInsets.only(right: AppSpacing.xs),
+              itemCount: cart.items.length,
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+              itemBuilder: (context, index) => _CartItemTile(
+                item: cart.items[index],
+                disabled: mutationInProgress,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _CartSummary(cart: cart, disabled: mutationInProgress),
+      ],
+    );
+  }
+}
+
 class _CartContent extends ConsumerWidget {
   const _CartContent({required this.cart, required this.cartState});
 

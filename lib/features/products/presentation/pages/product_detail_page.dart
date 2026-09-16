@@ -49,8 +49,6 @@ class ProductDetailPage extends ConsumerWidget {
             Text('Stock: ${item.stock}'),
             if (item.category case final category?)
               Text('Category: ${category.name}'),
-            if (item.minOrderQuantity case final minimum? when minimum > 1)
-              Text('Minimum purchase: $minimum'),
             Text(item.isActive ? 'Available' : 'Not available'),
             if (item.isActive && item.stock > 0) ...[
               const SizedBox(height: 24),
@@ -60,10 +58,7 @@ class ProductDetailPage extends ConsumerWidget {
                     : () async {
                         await ref
                             .read(cartProvider.notifier)
-                            .addItem(
-                              item.id,
-                              quantity: item.minOrderQuantity ?? 1,
-                            );
+                            .addItem(item.id, quantity: 1);
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
