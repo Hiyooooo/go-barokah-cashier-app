@@ -46,5 +46,8 @@ app.*.map.json
 
 .AGENTS.md
 /docs/*
+!/docs/design-system-ud-barokah.md
 .env
 /test/*
+/graphify-out/*
+/.ui-craft/*

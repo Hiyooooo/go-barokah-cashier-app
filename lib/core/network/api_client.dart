@@ -7,6 +7,7 @@ import '../constants/app_config.dart';
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
 typedef TokenReader = Future<String?> Function();
+typedef UnauthorizedHandler = Future<void> Function();
 
 final _secureStorage = FlutterSecureStorage();
 
@@ -40,6 +41,7 @@ class ApiClient {
 
   late final Dio _dio;
   final TokenReader _readToken;
+  UnauthorizedHandler? unauthorizedHandler;
 
   Future<Response<T>> request<T>(
     String path, {
@@ -56,7 +58,12 @@ class ApiClient {
         options: (options ?? Options()).copyWith(method: method),
       );
     } on DioException catch (error) {
-      throw ApiException.fromDio(error);
+      final exception = ApiException.fromDio(error);
+      if (exception.type == ApiErrorType.unauthorized) {
+        await _secureStorage.delete(key: tokenKey);
+        await unauthorizedHandler?.call();
+      }
+      throw exception;
     }
   }
 
@@ -81,11 +88,15 @@ class ApiException implements Exception {
     required this.type,
     required this.message,
     this.statusCode,
+    this.code,
+    this.details,
   });
 
   final ApiErrorType type;
   final String message;
   final int? statusCode;
+  final String? code;
+  final Object? details;
 
   factory ApiException.fromDio(DioException error) {
     final statusCode = error.response?.statusCode;
@@ -100,7 +111,8 @@ class ApiException implements Exception {
       );
     }
 
-    if (error.type == DioExceptionType.connectionError) {
+    if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.unknown && statusCode == null) {
       return const ApiException(
         type: ApiErrorType.network,
         message: 'Network error. Check your connection and try again.',
@@ -123,6 +135,8 @@ class ApiException implements Exception {
       type: type,
       statusCode: statusCode,
       message: responseMessage ?? _defaultMessage(type),
+      code: _responseCode(error.response?.data),
+      details: _responseDetails(error.response?.data),
     );
   }
 
@@ -135,6 +149,16 @@ class ApiException implements Exception {
     }
     return null;
   }
+
+  static String? _responseCode(Object? data) => switch (data) {
+    {'code': final String code} when code.isNotEmpty => code,
+    _ => null,
+  };
+
+  static Object? _responseDetails(Object? data) => switch (data) {
+    {'details': final details} => details,
+    _ => null,
+  };
 
   static String _defaultMessage(ApiErrorType type) => switch (type) {
     ApiErrorType.badRequest => 'The request is not valid.',

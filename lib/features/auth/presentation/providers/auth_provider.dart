@@ -12,11 +12,22 @@ final authProvider = AsyncNotifierProvider<AuthNotifier, AuthUser?>(
   AuthNotifier.new,
 );
 
+final sessionExpiredProvider = StateProvider<bool>((ref) => false);
+
 class AuthNotifier extends AsyncNotifier<AuthUser?> {
   AuthRepository get _repository => ref.read(authRepositoryProvider);
 
   @override
-  Future<AuthUser?> build() => _repository.restoreSession();
+  Future<AuthUser?> build() async {
+    final apiClient = ref.read(apiClientProvider);
+    apiClient.unauthorizedHandler = () async {
+      ref.read(sessionExpiredProvider.notifier).state = true;
+      if (state.valueOrNull != null) {
+        state = const AsyncData(null);
+      }
+    };
+    return _repository.restoreSession();
+  }
 
   Future<void> login({required String email, required String password}) async {
     state = const AsyncLoading();
@@ -26,6 +37,7 @@ class AuthNotifier extends AsyncNotifier<AuthUser?> {
         await _repository.logout();
         throw const AuthException('Only cashier accounts can use this app.');
       }
+      ref.read(sessionExpiredProvider.notifier).state = false;
       return AuthUser.fromAccount(result.account);
     });
   }
@@ -34,6 +46,7 @@ class AuthNotifier extends AsyncNotifier<AuthUser?> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await _repository.logout();
+      ref.read(sessionExpiredProvider.notifier).state = false;
       return null;
     });
   }

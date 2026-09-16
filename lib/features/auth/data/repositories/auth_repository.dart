@@ -44,11 +44,15 @@ class AuthRepository {
     if (await _storage.read(key: tokenKey) == null) return null;
 
     try {
-      final response = await _apiClient.request<Map<String, dynamic>>('/me');
-      final user = TokenUser.fromJson(
-        response.data!['user'] as Map<String, dynamic>,
+      final response = await _apiClient.request<Map<String, dynamic>>(
+        '/api/users/me',
       );
-      return AuthUser.fromToken(user);
+      final user = parseRestoredUser(response.data!);
+      if (user == null) {
+        await _storage.delete(key: tokenKey);
+        return null;
+      }
+      return user;
     } on ApiException catch (error) {
       if (error.type == ApiErrorType.unauthorized) {
         await _storage.delete(key: tokenKey);
@@ -57,4 +61,12 @@ class AuthRepository {
       rethrow;
     }
   }
+}
+
+AuthUser? parseRestoredUser(Map<String, dynamic> response) {
+  final data = response['data'];
+  if (data is! Map<String, dynamic>) return null;
+
+  final user = TokenUser.fromJson(data);
+  return user.role == 'cashier' ? AuthUser.fromToken(user) : null;
 }

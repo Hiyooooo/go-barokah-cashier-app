@@ -1,0 +1,73 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing/printing.dart';
+
+import '../../../../app/theme.dart';
+import '../../../../core/widgets/async_state_widgets.dart';
+import '../../data/models/receipt_models.dart';
+import '../../printing/receipt_print_service.dart';
+import '../providers/receipt_provider.dart';
+
+class ReceiptPrintPreviewPage extends ConsumerWidget {
+  const ReceiptPrintPreviewPage({
+    required this.saleNumber,
+    this.initialReceipt,
+    super.key,
+  });
+
+  final String saleNumber;
+  final Receipt? initialReceipt;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final receipt = initialReceipt != null
+        ? AsyncValue.data(initialReceipt!)
+        : ref.watch(receiptProvider(saleNumber));
+    final service = ReceiptPrintService();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Pratinjau cetak')),
+      body: receipt.when(
+        loading: () => const AppLoading(),
+        error: (error, _) => AppError(
+          message: userFacingError(
+            error,
+            fallback: 'Struk belum dapat dimuat.',
+          ),
+          onRetry: () => ref.invalidate(receiptProvider(saleNumber)),
+          onBack: () => Navigator.maybePop(context),
+        ),
+        data: (value) => Column(
+          children: [
+            Expanded(
+              child: PdfPreview(
+                initialPageFormat: ReceiptPrintService.receiptPageFormat,
+                canChangePageFormat: false,
+                canChangeOrientation: false,
+                dynamicLayout: false,
+                allowPrinting: true,
+                allowSharing: true,
+                build: (_) => service.buildPdf(value),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.sm,
+                AppSpacing.lg,
+                AppSpacing.lg,
+              ),
+              child: Semantics(
+                label: 'Nomor transaksi ${value.saleNumber}',
+                child: Text(
+                  'Transaksi ${value.saleNumber}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
