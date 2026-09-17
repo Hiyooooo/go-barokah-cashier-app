@@ -34,6 +34,27 @@ class CartNotifier extends AsyncNotifier<Cart> {
     () => _repository.updateItem(productId, quantity),
   );
 
+  Future<void> decrementItem(int productId) {
+    final cart = state.valueOrNull;
+    final item = cart?.items
+        .where((item) => item.productId == productId)
+        .firstOrNull;
+    if (cart == null || item == null || item.quantity <= 1) {
+      return Future.value();
+    }
+
+    return _mutateProduct(productId, () {
+      final latestCart = state.valueOrNull ?? cart;
+      final latestItem = latestCart.items
+          .where((item) => item.productId == productId)
+          .firstOrNull;
+      if (latestItem == null || latestItem.quantity <= 1) {
+        return Future.value(latestCart);
+      }
+      return _repository.updateItem(productId, latestItem.quantity - 1);
+    });
+  }
+
   Future<void> removeItem(int productId) =>
       _mutateProduct(productId, () => _repository.removeItem(productId));
 

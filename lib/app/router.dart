@@ -67,12 +67,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/products/:id',
-        builder: (_, state) {
-          final productId = int.tryParse(state.pathParameters['id'] ?? '');
-          return productId == null
-              ? const RouteErrorPage(message: 'Product not found.')
-              : ProductDetailPage(productId: productId);
-        },
+        builder: (_, state) => productDetailRoute(state.pathParameters['id']),
       ),
       GoRoute(path: '/checkout', builder: (_, _) => const CheckoutPage()),
       GoRoute(
@@ -103,6 +98,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         RouteErrorPage(message: state.error?.message ?? 'Page not found.'),
   );
 });
+
+Widget productDetailRoute(String? rawId) {
+  final productId = int.tryParse(rawId ?? '');
+  return productId == null || productId < 1
+      ? const RouteErrorPage(message: 'Produk tidak ditemukan.')
+      : ProductDetailPage(productId: productId);
+}
 
 class RouteErrorPage extends StatelessWidget {
   const RouteErrorPage({required this.message, super.key});

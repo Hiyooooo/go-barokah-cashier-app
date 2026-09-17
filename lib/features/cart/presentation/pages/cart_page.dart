@@ -72,6 +72,90 @@ class CartPage extends ConsumerWidget {
   }
 }
 
+Future<bool> _confirmRemoveCartItem(
+  BuildContext context,
+  CartItem item,
+) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Expanded(child: Text('Hapus produk dari keranjang?')),
+            IconButton(
+              onPressed: () => Navigator.pop(context, false),
+              tooltip: 'Tutup konfirmasi',
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        content: Text('${item.name} akan dihapus dari keranjang.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus produk'),
+          ),
+        ],
+      ),
+    ) ??
+    false;
+
+Future<void> _decrementCartItem(
+  BuildContext context,
+  WidgetRef ref,
+  CartItem item,
+) async {
+  final notifier = ref.read(cartProvider.notifier);
+  if (notifier.isMutatingProduct(item.productId)) return;
+
+  if (item.quantity == 1) {
+    if (!await _confirmRemoveCartItem(context, item) || !context.mounted) {
+      return;
+    }
+    if (notifier.isMutatingProduct(item.productId)) return;
+
+    final latestItem = _cartItemFor(ref, item.productId);
+    if (latestItem == null) return;
+    if (latestItem.quantity > 1) {
+      await notifier.decrementItem(item.productId);
+    } else {
+      await notifier.removeItem(item.productId);
+    }
+    return;
+  }
+
+  await notifier.decrementItem(item.productId);
+}
+
+Future<void> _removeCartItem(
+  BuildContext context,
+  WidgetRef ref,
+  CartItem item,
+) async {
+  final notifier = ref.read(cartProvider.notifier);
+  if (notifier.isMutatingProduct(item.productId)) return;
+
+  if (item.quantity == 1 && !await _confirmRemoveCartItem(context, item)) {
+    return;
+  }
+  if (!context.mounted || notifier.isMutatingProduct(item.productId)) return;
+
+  if (_cartItemFor(ref, item.productId) != null) {
+    await notifier.removeItem(item.productId);
+  }
+}
+
+CartItem? _cartItemFor(WidgetRef ref, int productId) => ref
+    .read(cartProvider)
+    .valueOrNull
+    ?.items
+    .where((item) => item.productId == productId)
+    .firstOrNull;
+
 class CartPanel extends ConsumerWidget {
   const CartPanel({super.key});
 
@@ -162,11 +246,29 @@ class _CartPanelContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final mutationInProgress = cartState.isLoading;
+    final notifier = ref.read(cartProvider.notifier);
     if (cart.items.isEmpty) {
-      return _EmptyCart(onBrowse: () => context.go('/products'));
+      return Column(
+        children: [
+          if (cartState.hasError) ...[
+            _CartMutationError(error: cartState.error!),
+            const SizedBox(height: AppSpacing.md),
+          ],
+          Expanded(
+            child: Center(
+              child: _EmptyCart(onBrowse: () => context.go('/products')),
+            ),
+          ),
+        ],
+      );
     }
 
-    final mutationInProgress = cartState.isLoading;
+    final summary = _CartSummary(
+      cart: cart,
+      disabled: mutationInProgress,
+      compact: true,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -175,6 +277,10 @@ class _CartPanelContent extends ConsumerWidget {
             borderRadius: BorderRadius.all(Radius.circular(AppRadius.badge)),
             child: LinearProgressIndicator(minHeight: 3),
           ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+        if (mutationInProgress) ...[
+          const LinearProgressIndicator(minHeight: 2),
           const SizedBox(height: AppSpacing.md),
         ],
         if (cartState.hasError) ...[
@@ -187,18 +293,177 @@ class _CartPanelContent extends ConsumerWidget {
               padding: const EdgeInsets.only(right: AppSpacing.xs),
               itemCount: cart.items.length,
               separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-              itemBuilder: (context, index) => _CartItemTile(
+              itemBuilder: (context, index) => _CartPanelItemRow(
                 item: cart.items[index],
-                disabled: mutationInProgress,
+                disabled: notifier.isMutatingProduct(
+                  cart.items[index].productId,
+                ),
               ),
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
-        _CartSummary(cart: cart, disabled: mutationInProgress),
+        const SizedBox(height: AppSpacing.lg),
+        Container(
+          padding: const EdgeInsets.only(top: AppSpacing.lg),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+          ),
+          child: summary,
+        ),
       ],
     );
   }
+}
+
+class _CartPanelItemRow extends ConsumerWidget {
+  const _CartPanelItemRow({required this.item, required this.disabled});
+
+  final CartItem item;
+  final bool disabled;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasStockWarning = item.quantity >= item.stock;
+    final notifier = ref.read(cartProvider.notifier);
+    final stockColor = item.stock == 0
+        ? Theme.of(context).colorScheme.error
+        : AppColors.warmBrown;
+
+    return Container(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                onPressed: disabled
+                    ? null
+                    : () => _removeCartItem(context, ref, item),
+                tooltip: 'Hapus ${item.name}',
+                icon: const Icon(Icons.delete_outline, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  formatPrice(item.finalPrice),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              Text(
+                formatPrice(item.subtotal),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(color: AppColors.forestGreen),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              _PanelQuantityControl(
+                icon: Icons.remove,
+                label: item.quantity == 1
+                    ? 'Hapus ${item.name}'
+                    : 'Kurangi ${item.name}',
+                onPressed: disabled
+                    ? null
+                    : () => _decrementCartItem(context, ref, item),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Semantics(
+                  label: 'Jumlah ${item.quantity}',
+                  child: Text(
+                    '${item.quantity}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ),
+              _PanelQuantityControl(
+                icon: Icons.add,
+                label: 'Tambah ${item.name}',
+                onPressed: disabled || item.quantity >= item.stock
+                    ? null
+                    : () => notifier.updateItem(
+                        item.productId,
+                        item.quantity + 1,
+                      ),
+              ),
+              const Spacer(),
+              Text(
+                'Stok ${item.stock}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          if (hasStockWarning) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Icon(
+                  item.stock == 0
+                      ? Icons.remove_shopping_cart_outlined
+                      : Icons.warning_amber_outlined,
+                  size: 16,
+                  color: stockColor,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    item.stock == 0
+                        ? 'Produk tidak tersedia.'
+                        : 'Jumlah sudah mencapai stok.',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: stockColor),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PanelQuantityControl extends StatelessWidget {
+  const _PanelQuantityControl({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 44,
+    child: IconButton(
+      onPressed: onPressed,
+      tooltip: label,
+      icon: Icon(icon, size: 18),
+    ),
+  );
 }
 
 class _CartContent extends ConsumerWidget {
@@ -214,6 +479,7 @@ class _CartContent extends ConsumerWidget {
     }
 
     final mutationInProgress = cartState.isLoading;
+    final notifier = ref.read(cartProvider.notifier);
     final content = LayoutBuilder(
       builder: (context, constraints) {
         final isTablet = constraints.maxWidth >= 800;
@@ -226,7 +492,7 @@ class _CartContent extends ConsumerWidget {
           separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
           itemBuilder: (context, index) => _CartItemTile(
             item: cart.items[index],
-            disabled: mutationInProgress,
+            disabled: notifier.isMutatingProduct(cart.items[index].productId),
           ),
         );
         final summary = _CartSummary(cart: cart, disabled: mutationInProgress);
@@ -302,6 +568,7 @@ class _CartItemTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(cartProvider.notifier);
+    final isMutating = notifier.isMutatingProduct(item.productId);
     final hasDiscount = item.discountAmount != null && item.discountAmount! > 0;
     final stockWarning = item.quantity >= item.stock;
 
@@ -320,9 +587,9 @@ class _CartItemTile extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: disabled
+                  onPressed: isMutating
                       ? null
-                      : () => notifier.removeItem(item.productId),
+                      : () => _removeCartItem(context, ref, item),
                   tooltip: 'Hapus ${item.name}',
                   icon: const Icon(Icons.delete_outline),
                 ),
@@ -372,14 +639,17 @@ class _CartItemTile extends ConsumerWidget {
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
-                IconButton(
-                  onPressed: disabled || item.quantity <= 1
-                      ? null
-                      : () => notifier.updateItem(
-                          item.productId,
-                          item.quantity - 1,
-                        ),
-                  icon: const Icon(Icons.remove),
+                SizedBox.square(
+                  dimension: 44,
+                  child: IconButton(
+                    onPressed: isMutating
+                        ? null
+                        : () => _decrementCartItem(context, ref, item),
+                    tooltip: item.quantity == 1
+                        ? 'Hapus ${item.name}'
+                        : 'Kurangi ${item.name}',
+                    icon: const Icon(Icons.remove),
+                  ),
                 ),
                 Semantics(
                   label: 'Jumlah ${item.quantity}',
@@ -392,7 +662,7 @@ class _CartItemTile extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: disabled || item.quantity >= item.stock
+                  onPressed: isMutating || item.quantity >= item.stock
                       ? null
                       : () => notifier.updateItem(
                           item.productId,
@@ -417,15 +687,20 @@ class _CartItemTile extends ConsumerWidget {
 }
 
 class _CartSummary extends ConsumerWidget {
-  const _CartSummary({required this.cart, required this.disabled});
+  const _CartSummary({
+    required this.cart,
+    required this.disabled,
+    this.compact = false,
+  });
 
   final Cart cart;
   final bool disabled;
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Card(
     child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.xxl),
+      padding: EdgeInsets.all(compact ? 0 : AppSpacing.xxl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

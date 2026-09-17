@@ -48,12 +48,14 @@ class CashierShell extends ConsumerWidget {
         return Scaffold(
           appBar: AppBar(
             title: const _ShellBrand(),
-            actions: const [
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                child: Center(child: _CashierContext()),
-              ),
-            ],
+            actions: constraints.maxWidth < 420
+                ? null
+                : const [
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                      child: Center(child: _CashierContext()),
+                    ),
+                  ],
           ),
           body: Row(
             children: [
@@ -81,18 +83,49 @@ class CashierShell extends ConsumerWidget {
               ? null
               : SafeArea(
                   top: false,
-                  child: NavigationBar(
-                    selectedIndex: navigationShell.currentIndex,
-                    onDestinationSelected: selectDestination,
-                    destinations: [
-                      for (final item in _navigationItems)
-                        NavigationDestination(
-                          icon: Icon(item.icon),
-                          selectedIcon: Icon(item.selectedIcon),
-                          label: item.label,
+                  child: constraints.maxWidth < 400
+                      ? BottomAppBar(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              for (
+                                var index = 0;
+                                index < _navigationItems.length;
+                                index++
+                              )
+                                Expanded(
+                                  child: Semantics(
+                                    button: true,
+                                    selected:
+                                        navigationShell.currentIndex == index,
+                                    label: _navigationItems[index].label,
+                                    child: IconButton(
+                                      tooltip: _navigationItems[index].label,
+                                      onPressed: () => selectDestination(index),
+                                      icon: Icon(
+                                        navigationShell.currentIndex == index
+                                            ? _navigationItems[index]
+                                                  .selectedIcon
+                                            : _navigationItems[index].icon,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        )
+                      : NavigationBar(
+                          selectedIndex: navigationShell.currentIndex,
+                          onDestinationSelected: selectDestination,
+                          destinations: [
+                            for (final item in _navigationItems)
+                              NavigationDestination(
+                                icon: Icon(item.icon),
+                                selectedIcon: Icon(item.selectedIcon),
+                                label: item.label,
+                              ),
+                          ],
                         ),
-                    ],
-                  ),
                 ),
         );
       },

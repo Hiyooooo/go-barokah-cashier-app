@@ -513,14 +513,14 @@ class _ProductResults extends ConsumerWidget {
           ),
         LayoutBuilder(
           builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 1080
-                ? 3
-                : constraints.maxWidth >= 680
-                ? 2
-                : 1;
+            const minCardWidth = 260.0;
             const gap = AppSpacing.lg;
+            final columns =
+                (constraints.maxWidth + gap) ~/ (minCardWidth + gap);
+            final columnCount = columns.clamp(1, 3);
             final itemWidth =
-                (constraints.maxWidth - (gap * (columns - 1))) / columns;
+                (constraints.maxWidth - (gap * (columnCount - 1))) /
+                columnCount;
 
             return Wrap(
               spacing: gap,
@@ -638,40 +638,48 @@ class _ProductCard extends ConsumerStatefulWidget {
 }
 
 class _ProductCardState extends ConsumerState<_ProductCard> {
+  bool _isAdding = false;
+
   Future<void> _addToCart() async {
     final cartNotifier = ref.read(cartProvider.notifier);
-    if (cartNotifier.isMutatingProduct(widget.product.id)) return;
+    if (_isAdding || cartNotifier.isMutatingProduct(widget.product.id)) return;
 
-    await cartNotifier.addItem(widget.product.id, quantity: 1);
-    if (!mounted) return;
+    setState(() => _isAdding = true);
 
-    final cartState = ref.read(cartProvider);
-    final cart = cartState.valueOrNull;
-    if (cartState.hasError) {
+    try {
+      await cartNotifier.addItem(widget.product.id, quantity: 1);
+      if (!mounted) return;
+
+      final cartState = ref.read(cartProvider);
+      final cart = cartState.valueOrNull;
+      if (cartState.hasError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingError(
+                cartState.error!,
+                fallback: 'Produk belum dapat ditambahkan ke keranjang.',
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+      final confirmedQuantity = cart == null
+          ? null
+          : _quantityForProduct(cart, widget.product.id);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            userFacingError(
-              cartState.error!,
-              fallback: 'Produk belum dapat ditambahkan ke keranjang.',
-            ),
+            confirmedQuantity == null
+                ? '${widget.product.name} belum dapat ditambahkan.'
+                : '${widget.product.name} ditambahkan. Jumlah terkonfirmasi: $confirmedQuantity.',
           ),
         ),
       );
-      return;
+    } finally {
+      if (mounted) setState(() => _isAdding = false);
     }
-    final confirmedQuantity = cart == null
-        ? null
-        : _quantityForProduct(cart, widget.product.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          confirmedQuantity == null
-              ? '${widget.product.name} belum dapat ditambahkan.'
-              : '${widget.product.name} ditambahkan. Jumlah terkonfirmasi: $confirmedQuantity.',
-        ),
-      ),
-    );
   }
 
   @override
@@ -680,7 +688,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
     final canAdd = product.isActive && product.stock > 0;
     final cartState = ref.watch(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
-    final isAdding = cartNotifier.isMutatingProduct(product.id);
+    final isAdding = _isAdding || cartNotifier.isMutatingProduct(product.id);
     final confirmedQuantity = _quantityForProduct(
       cartState.valueOrNull,
       product.id,
@@ -698,24 +706,30 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                 ? 'Tambah satu ${product.name} ke keranjang'
                 : 'Produk ${product.name} tidak tersedia',
             child: InkWell(
+              key: ValueKey('quick-add-${product.id}'),
               onTap: canAdd && !isAdding ? _addToCart : null,
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Stack(
-                      children: [
-                        _ProductImage(product: product),
-                        if (confirmedQuantity != null)
-                          Positioned(
-                            top: AppSpacing.sm,
-                            right: AppSpacing.sm,
-                            child: _QuantityBadge(quantity: confirmedQuantity),
-                          ),
-                      ],
+                    AspectRatio(
+                      aspectRatio: 1.65,
+                      child: Stack(
+                        children: [
+                          _ProductImage(product: product),
+                          if (confirmedQuantity != null)
+                            Positioned(
+                              top: AppSpacing.sm,
+                              right: AppSpacing.sm,
+                              child: _QuantityBadge(
+                                quantity: confirmedQuantity,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.md),
                     if (product.category case final category?)
                       Text(
                         category.name,
@@ -731,7 +745,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     _ProductPrice(product: product),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.md),
                     _StockStatus(product: product),
                     if (canAdd) ...[
                       const SizedBox(height: AppSpacing.md),
@@ -740,7 +754,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                           Icon(
                             isAdding
                                 ? Icons.hourglass_top_outlined
-                                : Icons.touch_app_outlined,
+                                : Icons.add_shopping_cart_outlined,
                             size: 18,
                             color: AppColors.forestGreen,
                           ),
@@ -748,8 +762,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                           Expanded(
                             child: Text(
                               isAdding
-                                  ? 'Menambahkan...'
-                                  : 'Ketuk untuk tambah 1',
+                                  ? 'Menambahkan 1...'
+                                  : 'Ketuk untuk tambah 1 ke keranjang',
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: AppColors.forestGreen),
                             ),
@@ -775,6 +789,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               AppSpacing.lg,
             ),
             child: OutlinedButton.icon(
+              key: ValueKey('product-detail-${product.id}'),
               onPressed: () => context.push('/products/${product.id}'),
               icon: const Icon(Icons.info_outline),
               label: const Text('Lihat detail'),
@@ -796,18 +811,30 @@ class _QuantityBadge extends StatelessWidget {
     label: 'Jumlah di keranjang: $quantity',
     child: Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
       ),
       decoration: BoxDecoration(
-        color: AppColors.forestGreen,
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.forestGreen),
         borderRadius: BorderRadius.circular(AppRadius.badge),
       ),
-      child: Text(
-        '$quantity',
-        style: Theme.of(
-          context,
-        ).textTheme.labelLarge?.copyWith(color: AppColors.surface),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.shopping_basket_outlined,
+            size: 16,
+            color: AppColors.forestGreen,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            '$quantity di keranjang',
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: AppColors.forestGreen),
+          ),
+        ],
       ),
     ),
   );
@@ -833,7 +860,6 @@ class _ProductImage extends StatelessWidget {
         : Image.network(
             _imageUrl(imageUrl),
             width: double.infinity,
-            height: 150,
             fit: BoxFit.cover,
             loadingBuilder: (context, child, progress) =>
                 progress == null ? child : const _ProductImagePlaceholder(),
@@ -845,7 +871,7 @@ class _ProductImage extends StatelessWidget {
       label: 'Gambar ${product.name}',
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        child: SizedBox(height: 150, child: image),
+        child: SizedBox.expand(child: image),
       ),
     );
   }
