@@ -212,13 +212,10 @@ class _CartVerification extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Text(
-        'Periksa pesanan',
-        style: Theme.of(context).textTheme.headlineMedium,
-      ),
+      Text('Pembayaran', style: Theme.of(context).textTheme.headlineMedium),
       const SizedBox(height: AppSpacing.xs),
       Text(
-        'Pastikan produk dan jumlahnya sudah sesuai sebelum dibayar.',
+        'Pilih metode pembayaran dan selesaikan transaksi.',
         style: Theme.of(
           context,
         ).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
@@ -359,13 +356,40 @@ class _PaymentPanel extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               if (isCash) ...[
+                Text(
+                  'Uang cepat',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: AppColors.textMuted),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (final suggestion in _quickCashSuggestions(payable))
+                      ActionChip(
+                        avatar: suggestion == payable
+                            ? const Icon(Icons.check, size: 16)
+                            : null,
+                        label: Text(
+                          suggestion == payable
+                              ? 'Uang Pas (${formatPrice(suggestion)})'
+                              : formatPrice(suggestion),
+                        ),
+                        onPressed: () {
+                          cashController.text = suggestion.toStringAsFixed(0);
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
                 Form(
                   key: formKey,
                   child: TextFormField(
                     key: const ValueKey('cash-received-field'),
                     controller: cashController,
                     focusNode: cashFocusNode,
-                    autofocus: true,
                     textInputAction: TextInputAction.done,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -392,11 +416,47 @@ class _PaymentPanel extends StatelessWidget {
                 ),
                 if (changePreview != null) ...[
                   const SizedBox(height: AppSpacing.md),
-                  _CheckoutNotice(
-                    icon: Icons.calculate_outlined,
-                    title: 'Estimasi kembalian',
-                    message: formatPrice(changePreview),
-                    color: AppColors.forestGreen,
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.successContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      border: Border.all(color: AppColors.forestGreen),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.change_circle_outlined,
+                              color: AppColors.forestGreen,
+                              size: 18,
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Expanded(
+                              child: Text(
+                                'Estimasi kembalian',
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      color: AppColors.forestGreen,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          formatPrice(changePreview),
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                color: AppColors.forestGreen,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ] else ...[
@@ -618,27 +678,63 @@ class _SummaryRow extends StatelessWidget {
   final bool emphasized;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
-          ),
+  Widget build(BuildContext context) {
+    if (emphasized) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: AppColors.forestGreen,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
-          ),
-        ),
-      ],
-    ),
-  );
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          const SizedBox(width: AppSpacing.sm),
+          Text(value, textAlign: TextAlign.end),
+        ],
+      ),
+    );
+  }
+}
+
+List<num> _quickCashSuggestions(num payable) {
+  if (payable <= 0) return const [];
+  final suggestions = <num>{payable};
+
+  const standardNotes = [10000, 20000, 50000, 100000, 200000, 500000, 1000000];
+  for (final note in standardNotes) {
+    if (note > payable) {
+      suggestions.add(note);
+      if (suggestions.length >= 4) break;
+    }
+  }
+
+  if (suggestions.length < 4) {
+    final round50k = ((payable / 50000).ceil()) * 50000;
+    if (round50k > payable) suggestions.add(round50k);
+    final round100k = ((payable / 100000).ceil()) * 100000;
+    if (round100k > payable) suggestions.add(round100k);
+  }
+
+  return suggestions.toList()..sort();
 }
