@@ -15,14 +15,63 @@ class CartPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
-
     final currentCart = cart.valueOrNull;
+    final isTablet = MediaQuery.sizeOf(context).width >= 800;
+    final hasItems = currentCart != null && currentCart.items.isNotEmpty;
+
+    Widget? bottomBar;
+    if (!isTablet && hasItems) {
+      bottomBar = SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total tagihan',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    Text(
+                      formatPrice(currentCart.summary.subtotal),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AppColors.forestGreen,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              FilledButton.icon(
+                key: const ValueKey('review-cart-screen'),
+                onPressed: cart.isLoading || cart.hasError
+                    ? null
+                    : () => context.push('/order-review'),
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text('Periksa pesanan'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Keranjang'),
         actions: [
-          if (currentCart?.items.isNotEmpty == true)
+          if (hasItems)
             IconButton(
               onPressed: cart.isLoading
                   ? null
@@ -32,8 +81,9 @@ class CartPage extends ConsumerWidget {
             ),
         ],
       ),
+      bottomNavigationBar: bottomBar,
       body: currentCart != null
-          ? _CartContent(cart: currentCart, cartState: cart)
+          ? _CartContent(cart: currentCart, cartState: cart, isTablet: isTablet)
           : cart.when(
               loading: () => const AppLoading(),
               error: (error, _) => AppError(
@@ -43,7 +93,11 @@ class CartPage extends ConsumerWidget {
                 ),
                 onRetry: () => ref.invalidate(cartProvider),
               ),
-              data: (value) => _CartContent(cart: value, cartState: cart),
+              data: (value) => _CartContent(
+                cart: value,
+                cartState: cart,
+                isTablet: isTablet,
+              ),
             ),
     );
   }
@@ -519,10 +573,15 @@ class _CartPanelItemRowState extends ConsumerState<_CartPanelItemRow> {
 }
 
 class _CartContent extends ConsumerWidget {
-  const _CartContent({required this.cart, required this.cartState});
+  const _CartContent({
+    required this.cart,
+    required this.cartState,
+    required this.isTablet,
+  });
 
   final Cart cart;
   final AsyncValue<Cart> cartState;
+  final bool isTablet;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -532,16 +591,159 @@ class _CartContent extends ConsumerWidget {
 
     final mutationInProgress = cartState.isLoading;
     final notifier = ref.read(cartProvider.notifier);
-    final content = ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: cart.items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-      itemBuilder: (context, index) => _CartItemTile(
-        item: cart.items[index],
-        disabled: notifier.isMutatingProduct(cart.items[index].productId),
+
+    final reviewButton = FilledButton.icon(
+      key: const ValueKey('review-cart-screen'),
+      onPressed: mutationInProgress || cartState.hasError
+          ? null
+          : () => context.push('/order-review'),
+      icon: const Icon(Icons.fact_check_outlined),
+      label: const Text('Periksa pesanan'),
+    );
+
+    Widget buildItemList() => RefreshIndicator(
+      onRefresh: () => ref.read(cartProvider.notifier).refreshCart(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.md,
+          AppSpacing.lg,
+          AppSpacing.xxxl,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final item in cart.items) ...[
+              _CartItemTile(
+                item: item,
+                disabled: notifier.isMutatingProduct(item.productId),
+              ),
+              if (item != cart.items.last)
+                const Divider(height: AppSpacing.lg, thickness: 1),
+            ],
+          ],
+        ),
       ),
     );
+
+    final header = Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Keranjang belanja',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '${cart.summary.itemsCount} jenis produk · ${cart.summary.totalQuantity} barang dipilih',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+          ),
+          if (cartState.hasError) ...[
+            const SizedBox(height: AppSpacing.md),
+            _CartMutationError(error: cartState.error!),
+          ],
+        ],
+      ),
+    );
+
+    if (isTablet) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: buildItemList()),
+                const VerticalDivider(width: 1, thickness: 1),
+                SizedBox(
+                  width: 340,
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(AppSpacing.lg),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Ringkasan keranjang',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Total barang',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium,
+                                    ),
+                                    Text(
+                                      '${cart.summary.totalQuantity}',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleSmall,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: AppSpacing.xs),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Subtotal',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium,
+                                    ),
+                                    Text(
+                                      formatPrice(cart.summary.subtotal),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            color: AppColors.forestGreen,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        reviewButton,
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: () => ref.read(cartProvider.notifier).refreshCart(),
@@ -549,45 +751,23 @@ class _CartContent extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
-          AppSpacing.xxl,
+          AppSpacing.md,
           AppSpacing.lg,
           AppSpacing.xxxl,
         ),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Keranjang belanja',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  '${cart.summary.totalQuantity} barang dipilih',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-                ),
-                if (cartState.hasError) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  _CartMutationError(error: cartState.error!),
-                ],
-                const SizedBox(height: AppSpacing.xxl),
-                content,
-                const SizedBox(height: AppSpacing.lg),
-                FilledButton.icon(
-                  key: const ValueKey('review-cart-screen'),
-                  onPressed: mutationInProgress || cartState.hasError
-                      ? null
-                      : () => context.push('/order-review'),
-                  icon: const Icon(Icons.fact_check_outlined),
-                  label: const Text('Periksa pesanan'),
-                ),
-              ],
-            ),
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            header,
+            for (final item in cart.items) ...[
+              _CartItemTile(
+                item: item,
+                disabled: notifier.isMutatingProduct(item.productId),
+              ),
+              if (item != cart.items.last)
+                const Divider(height: AppSpacing.lg, thickness: 1),
+            ],
+          ],
         ),
       ),
     );
@@ -607,119 +787,135 @@ class _CartItemTile extends ConsumerWidget {
     final hasDiscount = item.discountAmount != null && item.discountAmount! > 0;
     final stockWarning = item.quantity >= item.stock;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                onPressed: isMutating
+                    ? null
+                    : () => _removeCartItem(context, ref, item),
+                tooltip: 'Hapus ${item.name}',
+                icon: const Icon(Icons.delete_outline, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
+              Text(
+                formatPrice(item.finalPrice),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              if (hasDiscount) ...[
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  formatPrice(item.price),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textMuted,
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  'Diskon ${item.discountAmount!.toStringAsFixed(0)}%',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: AppColors.warmBrown),
+                ),
+              ],
+              const Spacer(),
+              Text(
+                'Stok: ${item.stock}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: stockWarning ? AppColors.warmBrown : null,
+                ),
+              ),
+            ],
+          ),
+          if (stockWarning) ...[
+            const SizedBox(height: AppSpacing.xs),
+            _CartNotice(
+              icon: Icons.warning_amber_outlined,
+              message: item.stock == 0
+                  ? 'Produk ini tidak tersedia.'
+                  : 'Jumlah sudah mencapai batas stok.',
+              color: item.stock == 0 ? AppColors.error : AppColors.warmBrown,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              SizedBox.square(
+                dimension: 44,
+                child: _StepperButton(
+                  onPressed: isMutating
+                      ? null
+                      : () => _decrementCartItem(context, ref, item),
+                  tooltip: item.quantity == 1
+                      ? 'Hapus ${item.name}'
+                      : 'Kurangi ${item.name}',
+                  icon: Icons.remove,
+                ),
+              ),
+              Semantics(
+                label: 'Jumlah ${item.quantity}',
+                child: SizedBox(
+                  width: 44,
                   child: Text(
-                    item.name,
+                    '${item.quantity}',
+                    textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                IconButton(
-                  onPressed: isMutating
+              ),
+              SizedBox.square(
+                dimension: 44,
+                child: _StepperButton(
+                  onPressed: isMutating || item.quantity >= item.stock
                       ? null
-                      : () => _removeCartItem(context, ref, item),
-                  tooltip: 'Hapus ${item.name}',
-                  icon: const Icon(Icons.delete_outline),
+                      : () => notifier.updateItem(
+                          item.productId,
+                          item.quantity + 1,
+                        ),
+                  tooltip: 'Tambah ${item.name}',
+                  icon: Icons.add,
                 ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                Text(
-                  formatPrice(item.finalPrice),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                if (hasDiscount) ...[
-                  const SizedBox(width: AppSpacing.sm),
+              ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   Text(
-                    formatPrice(item.price),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textMuted,
-                      decoration: TextDecoration.lineThrough,
-                    ),
+                    'Subtotal',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  const SizedBox(width: AppSpacing.sm),
                   Text(
-                    'Diskon ${item.discountAmount!.toStringAsFixed(0)}%',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: AppColors.warmBrown),
+                    formatPrice(item.subtotal),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.forestGreen,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Stok tersedia: ${item.stock}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (stockWarning) ...[
-              const SizedBox(height: AppSpacing.sm),
-              _CartNotice(
-                icon: Icons.warning_amber_outlined,
-                message: item.stock == 0
-                    ? 'Produk ini tidak tersedia.'
-                    : 'Jumlah sudah mencapai stok tersedia.',
-                color: item.stock == 0 ? AppColors.error : AppColors.warmBrown,
               ),
             ],
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                SizedBox.square(
-                  dimension: 44,
-                  child: _StepperButton(
-                    onPressed: isMutating
-                        ? null
-                        : () => _decrementCartItem(context, ref, item),
-                    tooltip: item.quantity == 1
-                        ? 'Hapus ${item.name}'
-                        : 'Kurangi ${item.name}',
-                    icon: Icons.remove,
-                  ),
-                ),
-                Semantics(
-                  label: 'Jumlah ${item.quantity}',
-                  child: SizedBox(
-                    width: 40,
-                    child: Text(
-                      '${item.quantity}',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-                SizedBox.square(
-                  dimension: 44,
-                  child: _StepperButton(
-                    onPressed: isMutating || item.quantity >= item.stock
-                        ? null
-                        : () => notifier.updateItem(
-                            item.productId,
-                            item.quantity + 1,
-                          ),
-                    tooltip: 'Tambah ${item.name}',
-                    icon: Icons.add,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  formatPrice(item.subtotal),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.forestGreen,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
