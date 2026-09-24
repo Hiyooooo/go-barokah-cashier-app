@@ -6,7 +6,6 @@ import '../../../../app/theme.dart';
 import '../../../../core/widgets/async_state_widgets.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../data/models/cart_models.dart';
-import '../../../checkout/presentation/providers/checkout_provider.dart';
 import '../providers/cart_provider.dart';
 
 class CartPage extends ConsumerWidget {
@@ -264,11 +263,6 @@ class _CartPanelContent extends ConsumerWidget {
       );
     }
 
-    final summary = _CartSummary(
-      cart: cart,
-      disabled: mutationInProgress,
-      compact: true,
-    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -290,6 +284,7 @@ class _CartPanelContent extends ConsumerWidget {
         Expanded(
           child: Scrollbar(
             child: ListView.separated(
+              key: const ValueKey('cart-panel-list'),
               padding: const EdgeInsets.only(right: AppSpacing.xs),
               itemCount: cart.items.length,
               separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
@@ -302,17 +297,50 @@ class _CartPanelContent extends ConsumerWidget {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
-        Container(
-          padding: const EdgeInsets.only(top: AppSpacing.lg),
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: AppColors.borderSubtle)),
-          ),
-          child: summary,
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          '${cart.summary.totalQuantity} barang • ${formatPrice(cart.summary.subtotal)}',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(color: AppColors.forestGreen),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        FilledButton.icon(
+          key: const ValueKey('review-cart'),
+          onPressed: () => context.push('/order-review'),
+          icon: const Icon(Icons.fact_check_outlined),
+          label: const Text('Periksa pesanan'),
         ),
       ],
     );
   }
+}
+
+class _StepperButton extends StatelessWidget {
+  const _StepperButton({
+    required this.onPressed,
+    required this.tooltip,
+    required this.icon,
+  });
+
+  final VoidCallback? onPressed;
+  final String tooltip;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: onPressed == null ? AppColors.borderSubtle : AppColors.surface,
+      border: Border.all(color: AppColors.border),
+      borderRadius: BorderRadius.circular(AppRadius.badge),
+    ),
+    child: IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: Icon(icon, size: 18),
+    ),
+  );
 }
 
 class _CartPanelItemRow extends ConsumerWidget {
@@ -324,10 +352,11 @@ class _CartPanelItemRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hasStockWarning = item.quantity >= item.stock;
-    final notifier = ref.read(cartProvider.notifier);
     final stockColor = item.stock == 0
         ? Theme.of(context).colorScheme.error
-        : AppColors.warmBrown;
+        : hasStockWarning
+        ? AppColors.warmBrown
+        : AppColors.forestGreen;
 
     return Container(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -360,110 +389,96 @@ class _CartPanelItemRow extends ConsumerWidget {
           const SizedBox(height: AppSpacing.xs),
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  formatPrice(item.finalPrice),
-                  style: Theme.of(context).textTheme.bodyMedium,
+              SizedBox.square(
+                dimension: 44,
+                child: _StepperButton(
+                  onPressed: disabled
+                      ? null
+                      : () => _decrementCartItem(context, ref, item),
+                  tooltip: item.quantity == 1
+                      ? 'Hapus ${item.name}'
+                      : 'Kurangi ${item.name}',
+                  icon: Icons.remove,
                 ),
-              ),
-              Text(
-                formatPrice(item.subtotal),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(color: AppColors.forestGreen),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              _PanelQuantityControl(
-                icon: Icons.remove,
-                label: item.quantity == 1
-                    ? 'Hapus ${item.name}'
-                    : 'Kurangi ${item.name}',
-                onPressed: disabled
-                    ? null
-                    : () => _decrementCartItem(context, ref, item),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: Semantics(
                   label: 'Jumlah ${item.quantity}',
                   child: Text(
+                    key: ValueKey('cart-quantity-${item.productId}'),
                     '${item.quantity}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
               ),
-              _PanelQuantityControl(
-                icon: Icons.add,
-                label: 'Tambah ${item.name}',
-                onPressed: disabled || item.quantity >= item.stock
-                    ? null
-                    : () => notifier.updateItem(
-                        item.productId,
-                        item.quantity + 1,
-                      ),
+              SizedBox.square(
+                dimension: 44,
+                child: _StepperButton(
+                  onPressed: disabled || item.quantity >= item.stock
+                      ? null
+                      : () => ref
+                            .read(cartProvider.notifier)
+                            .addItem(item.productId),
+                  tooltip: 'Tambah ${item.name}',
+                  icon: Icons.add,
+                ),
               ),
               const Spacer(),
-              Text(
-                'Stok ${item.stock}',
-                style: Theme.of(context).textTheme.bodySmall,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Subtotal',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Text(
+                      formatPrice(item.subtotal),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: AppColors.forestGreen,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          if (hasStockWarning) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                Icon(
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
+              Icon(
+                hasStockWarning
+                    ? item.stock == 0
+                          ? Icons.remove_shopping_cart_outlined
+                          : Icons.warning_amber_outlined
+                    : Icons.inventory_2_outlined,
+                size: 16,
+                color: stockColor,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
                   item.stock == 0
-                      ? Icons.remove_shopping_cart_outlined
-                      : Icons.warning_amber_outlined,
-                  size: 16,
-                  color: stockColor,
+                      ? 'Stok habis'
+                      : hasStockWarning
+                      ? 'Stok ${item.stock} · batas tercapai'
+                      : 'Stok ${item.stock}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: stockColor),
                 ),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: Text(
-                    item.stock == 0
-                        ? 'Produk tidak tersedia.'
-                        : 'Jumlah sudah mencapai stok.',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: stockColor),
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
-}
-
-class _PanelQuantityControl extends StatelessWidget {
-  const _PanelQuantityControl({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: 44,
-    child: IconButton(
-      onPressed: onPressed,
-      tooltip: label,
-      icon: Icon(icon, size: 18),
-    ),
-  );
 }
 
 class _CartContent extends ConsumerWidget {
@@ -480,41 +495,15 @@ class _CartContent extends ConsumerWidget {
 
     final mutationInProgress = cartState.isLoading;
     final notifier = ref.read(cartProvider.notifier);
-    final content = LayoutBuilder(
-      builder: (context, constraints) {
-        final isTablet = constraints.maxWidth >= 800;
-        final items = ListView.separated(
-          shrinkWrap: true,
-          physics: isTablet
-              ? const NeverScrollableScrollPhysics()
-              : const ClampingScrollPhysics(),
-          itemCount: cart.items.length,
-          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-          itemBuilder: (context, index) => _CartItemTile(
-            item: cart.items[index],
-            disabled: notifier.isMutatingProduct(cart.items[index].productId),
-          ),
-        );
-        final summary = _CartSummary(cart: cart, disabled: mutationInProgress);
-
-        return isTablet
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 13, child: items),
-                  const SizedBox(width: AppSpacing.xxl),
-                  SizedBox(width: 320, child: summary),
-                ],
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  items,
-                  const SizedBox(height: AppSpacing.xxl),
-                  summary,
-                ],
-              );
-      },
+    final content = ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: cart.items.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+      itemBuilder: (context, index) => _CartItemTile(
+        item: cart.items[index],
+        disabled: notifier.isMutatingProduct(cart.items[index].productId),
+      ),
     );
 
     return RefreshIndicator(
@@ -550,6 +539,15 @@ class _CartContent extends ConsumerWidget {
                 ],
                 const SizedBox(height: AppSpacing.xxl),
                 content,
+                const SizedBox(height: AppSpacing.lg),
+                FilledButton.icon(
+                  key: const ValueKey('review-cart-screen'),
+                  onPressed: mutationInProgress || cartState.hasError
+                      ? null
+                      : () => context.push('/order-review'),
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('Periksa pesanan'),
+                ),
               ],
             ),
           ),
@@ -641,14 +639,14 @@ class _CartItemTile extends ConsumerWidget {
               children: [
                 SizedBox.square(
                   dimension: 44,
-                  child: IconButton(
+                  child: _StepperButton(
                     onPressed: isMutating
                         ? null
                         : () => _decrementCartItem(context, ref, item),
                     tooltip: item.quantity == 1
                         ? 'Hapus ${item.name}'
                         : 'Kurangi ${item.name}',
-                    icon: const Icon(Icons.remove),
+                    icon: Icons.remove,
                   ),
                 ),
                 Semantics(
@@ -661,14 +659,18 @@ class _CartItemTile extends ConsumerWidget {
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: isMutating || item.quantity >= item.stock
-                      ? null
-                      : () => notifier.updateItem(
-                          item.productId,
-                          item.quantity + 1,
-                        ),
-                  icon: const Icon(Icons.add),
+                SizedBox.square(
+                  dimension: 44,
+                  child: _StepperButton(
+                    onPressed: isMutating || item.quantity >= item.stock
+                        ? null
+                        : () => notifier.updateItem(
+                            item.productId,
+                            item.quantity + 1,
+                          ),
+                    tooltip: 'Tambah ${item.name}',
+                    icon: Icons.add,
+                  ),
                 ),
                 const Spacer(),
                 Text(
@@ -684,99 +686,6 @@ class _CartItemTile extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _CartSummary extends ConsumerWidget {
-  const _CartSummary({
-    required this.cart,
-    required this.disabled,
-    this.compact = false,
-  });
-
-  final Cart cart;
-  final bool disabled;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => Card(
-    child: Padding(
-      padding: EdgeInsets.all(compact ? 0 : AppSpacing.xxl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Ringkasan belanja',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _SummaryRow(
-            label: 'Jumlah barang',
-            value: '${cart.summary.totalQuantity}',
-          ),
-          _SummaryRow(
-            label: 'Total normal',
-            value: formatPrice(cart.summary.normalSubtotal),
-          ),
-          _SummaryRow(
-            label: 'Diskon',
-            value: formatPrice(cart.summary.discountTotal),
-          ),
-          const Divider(height: AppSpacing.xxl),
-          _SummaryRow(
-            label: 'Subtotal',
-            value: formatPrice(cart.summary.subtotal),
-            emphasized: true,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          FilledButton(
-            onPressed: disabled
-                ? null
-                : () async {
-                    await ref
-                        .read(checkoutProvider.notifier)
-                        .resetCompletedSale();
-                    if (context.mounted) context.push('/checkout');
-                  },
-            child: Text(disabled ? 'Memperbarui...' : 'Lanjut ke checkout'),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({
-    required this.label,
-    required this.value,
-    this.emphasized = false,
-  });
-
-  final String label;
-  final String value;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
-        ),
-        Text(
-          value,
-          style: emphasized
-              ? Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(color: AppColors.forestGreen)
-              : null,
-        ),
-      ],
-    ),
-  );
 }
 
 class _EmptyCart extends StatelessWidget {

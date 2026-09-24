@@ -1,5 +1,6 @@
 class Receipt {
   const Receipt({
+    this.status = 'COMPLETED',
     required this.saleNumber,
     required this.createdAt,
     required this.cashierName,
@@ -13,6 +14,7 @@ class Receipt {
     this.notes,
   });
 
+  final String status;
   final String saleNumber;
   final DateTime? createdAt;
   final String cashierName;
@@ -26,6 +28,7 @@ class Receipt {
   final String? notes;
 
   factory Receipt.fromJson(Map<String, dynamic> json) => Receipt(
+    status: (json['status'] ?? 'COMPLETED').toString(),
     saleNumber: _string(json, 'sale_number', 'saleNumber'),
     createdAt: _dateTime(
       json['transaction_date'] ??

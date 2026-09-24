@@ -8,6 +8,7 @@ import '../features/auth/presentation/providers/auth_provider.dart';
 import '../features/account/presentation/pages/account_page.dart';
 import '../features/cart/presentation/pages/cart_page.dart';
 import '../features/checkout/presentation/pages/checkout_page.dart';
+import '../features/checkout/presentation/pages/order_review_page.dart';
 import '../features/products/presentation/pages/product_detail_page.dart';
 import '../features/products/presentation/pages/products_page.dart';
 import '../features/receipt/presentation/pages/receipt_page.dart';
@@ -68,6 +69,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/products/:id',
         builder: (_, state) => productDetailRoute(state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/order-review',
+        builder: (_, _) => const OrderReviewPage(),
       ),
       GoRoute(path: '/checkout', builder: (_, _) => const CheckoutPage()),
       GoRoute(

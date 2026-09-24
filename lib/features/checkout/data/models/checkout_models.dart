@@ -1,4 +1,22 @@
 class CashSaleResult {
+  final String status;
+  final String saleNumber;
+  final DateTime? transactionDate;
+  final String paymentMethod;
+  final String cashierName;
+  final List<CashSaleItem> items;
+  final num subtotal;
+  final num discountTotal;
+  final num grandTotal;
+  final num cashReceived;
+  final num changeAmount;
+  final String? notes;
+  final String? snapToken;
+  final String? paymentUrl;
+  final String? qrString;
+  final String? qrCodeUrl;
+  final DateTime? expiryTime;
+
   const CashSaleResult({
     required this.status,
     required this.saleNumber,
@@ -12,20 +30,12 @@ class CashSaleResult {
     required this.cashReceived,
     required this.changeAmount,
     this.notes,
+    this.snapToken,
+    this.paymentUrl,
+    this.qrString,
+    this.qrCodeUrl,
+    this.expiryTime,
   });
-
-  final String status;
-  final String saleNumber;
-  final DateTime? transactionDate;
-  final String paymentMethod;
-  final String cashierName;
-  final List<CashSaleItem> items;
-  final num subtotal;
-  final num discountTotal;
-  final num grandTotal;
-  final num cashReceived;
-  final num changeAmount;
-  final String? notes;
 
   Map<String, dynamic> toJson() => {
     'status': status,
@@ -40,6 +50,11 @@ class CashSaleResult {
     'cash_received': cashReceived,
     'change_amount': changeAmount,
     'notes': notes,
+    if (snapToken != null) 'snap_token': snapToken,
+    if (paymentUrl != null) 'payment_url': paymentUrl,
+    if (qrString != null) 'qr_string': qrString,
+    if (qrCodeUrl != null) 'qr_code_url': qrCodeUrl,
+    if (expiryTime != null) 'expiry_time': expiryTime!.toIso8601String(),
   };
 
   factory CashSaleResult.fromJson(Map<String, dynamic> json) => CashSaleResult(
@@ -65,6 +80,16 @@ class CashSaleResult {
     cashReceived: _number(json, 'cash_received', 'cashReceived'),
     changeAmount: _number(json, 'change_amount', 'changeAmount'),
     notes: json['notes'] as String?,
+    snapToken: json['snap_token'] as String? ?? json['snapToken'] as String?,
+    paymentUrl: json['payment_url'] as String? ?? json['paymentUrl'] as String?,
+    qrString: _qrString(json),
+    qrCodeUrl: _qrCodeUrl(json),
+    expiryTime: _dateTime(
+      json['expiry_time'] ??
+          json['expiryTime'] ??
+          json['expired_at'] ??
+          json['expiredAt'],
+    ),
   );
 }
 
@@ -146,6 +171,35 @@ num _num(Object? value) => value is num ? value : num.parse(value.toString());
 num? _optionalNum(Object? value) => value == null ? null : _num(value);
 
 int _int(Object? value) => _num(value).toInt();
+
+// ponytail: accept backend naming variants for QR payloads; empty counts as missing.
+String? _nonEmpty(Object? value) =>
+    value is String && value.trim().isNotEmpty ? value : null;
+
+String? _qrString(Map<String, dynamic> json) =>
+    _nonEmpty(json['qr_string']) ??
+    _nonEmpty(json['qrString']) ??
+    _nonEmpty(json['qr_code']) ??
+    _nonEmpty(json['qrCode']);
+
+String? _qrCodeUrl(Map<String, dynamic> json) =>
+    _nonEmpty(json['qr_code_url']) ??
+    _nonEmpty(json['qrCodeUrl']) ??
+    _nonEmpty(json['qr_url']) ??
+    _nonEmpty(json['qrUrl']) ??
+    _qrActionUrl(json['actions']);
+
+String? _qrActionUrl(Object? value) {
+  if (value is! List) return null;
+  for (final entry in value.whereType<Map>()) {
+    final name = entry['name']?.toString().toLowerCase() ?? '';
+    final url = _nonEmpty(entry['url']);
+    if (url != null && (name.contains('qr') || url.contains('qr'))) {
+      return url;
+    }
+  }
+  return null;
+}
 
 String _cashierName(Map<String, dynamic> json) {
   final cashier = json['cashier'];

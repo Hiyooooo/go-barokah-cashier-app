@@ -11,6 +11,7 @@ class GoBarokahApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
       title: 'Go-Barokah Cashier',
+      debugShowCheckedModeBanner: false,
       theme: appTheme,
       routerConfig: ref.watch(appRouterProvider),
     );

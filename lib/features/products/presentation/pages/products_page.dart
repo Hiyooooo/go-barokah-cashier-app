@@ -47,82 +47,16 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     await ref.read(productCatalogProvider.notifier).applyFilters();
   }
 
-  Future<void> _selectCategories(List<ProductCategory> categories) async {
-    final selected = {..._categoryIds};
-    final result = await showModalBottomSheet<Set<int>>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.lg,
-              AppSpacing.lg,
-              AppSpacing.sm,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(context).height * .75,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Filter kategori',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Pilih satu atau beberapa kategori produk.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Expanded(
-                    child: categories.isEmpty
-                        ? const Center(child: Text('Belum ada kategori.'))
-                        : ListView(
-                            children: [
-                              for (final category in categories)
-                                CheckboxListTile(
-                                  value: selected.contains(category.id),
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(category.name),
-                                  onChanged: (value) => setSheetState(() {
-                                    if (value == true) {
-                                      selected.add(category.id);
-                                    } else {
-                                      selected.remove(category.id);
-                                    }
-                                  }),
-                                ),
-                            ],
-                          ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context, {...selected}),
-                    child: const Text('Terapkan filter'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    if (result == null || !mounted) return;
+  Future<void> _toggleCategory(int categoryId) async {
     setState(() {
-      _categoryIds
-        ..clear()
-        ..addAll(result);
+      if (!_categoryIds.remove(categoryId)) _categoryIds.add(categoryId);
     });
     await _search();
   }
 
-  Future<void> _removeCategory(int categoryId) async {
-    setState(() => _categoryIds.remove(categoryId));
+  Future<void> _clearCategories() async {
+    if (_categoryIds.isEmpty) return;
+    setState(_categoryIds.clear);
     await _search();
   }
 
@@ -152,8 +86,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             onRetry: () {
               unawaited(ref.refresh(productCatalogProvider.future));
             },
-            onSelectCategories: _selectCategories,
-            onRemoveCategory: _removeCategory,
+            onToggleCategory: _toggleCategory,
+            onClearCategories: _clearCategories,
             onResetFilters: _resetFilters,
           );
 
@@ -189,8 +123,8 @@ class _ProductsBrowser extends StatelessWidget {
     required this.onSearch,
     required this.onRefresh,
     required this.onRetry,
-    required this.onSelectCategories,
-    required this.onRemoveCategory,
+    required this.onToggleCategory,
+    required this.onClearCategories,
     required this.onResetFilters,
   });
 
@@ -204,8 +138,8 @@ class _ProductsBrowser extends StatelessWidget {
   final VoidCallback onSearch;
   final Future<void> Function() onRefresh;
   final VoidCallback onRetry;
-  final ValueChanged<List<ProductCategory>> onSelectCategories;
-  final ValueChanged<int> onRemoveCategory;
+  final ValueChanged<int> onToggleCategory;
+  final VoidCallback onClearCategories;
   final VoidCallback onResetFilters;
 
   @override
@@ -222,7 +156,7 @@ class _ProductsBrowser extends StatelessWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(
               horizontalPadding,
-              AppSpacing.xxl,
+              AppSpacing.lg,
               horizontalPadding,
               AppSpacing.xxxl,
             ),
@@ -235,23 +169,16 @@ class _ProductsBrowser extends StatelessWidget {
                     children: [
                       Text(
                         'Produk',
-                        style: Theme.of(context).textTheme.headlineLarge,
+                        style: Theme.of(context).textTheme.headlineMedium,
                       ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Pilih produk untuk memulai transaksi baru.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xxl),
+                      const SizedBox(height: AppSpacing.lg),
                       _SearchField(
                         controller: searchController,
                         onChanged: onSearchChanged,
                         onSubmitted: onSearchSubmitted,
                         onSearch: onSearch,
                       ),
-                      const SizedBox(height: AppSpacing.md),
+                      const SizedBox(height: AppSpacing.sm),
                       categories.when(
                         loading: () => const ClipRRect(
                           borderRadius: BorderRadius.all(
@@ -263,13 +190,11 @@ class _ProductsBrowser extends StatelessWidget {
                         data: (items) => _CategoryFilters(
                           categories: items,
                           selectedIds: selectedCategoryIds,
-                          hasActiveFilters: hasActiveFilters,
-                          onSelect: () => onSelectCategories(items),
-                          onRemove: onRemoveCategory,
-                          onReset: onResetFilters,
+                          onToggle: onToggleCategory,
+                          onShowAll: onClearCategories,
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.xxl),
+                      const SizedBox(height: AppSpacing.lg),
                       if (products.isRefreshing) ...[
                         const ClipRRect(
                           borderRadius: BorderRadius.all(
@@ -323,48 +248,21 @@ class _SearchField extends StatelessWidget {
   final VoidCallback onSearch;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final field = TextField(
-        controller: controller,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        textInputAction: TextInputAction.search,
-        decoration: const InputDecoration(
-          labelText: 'Cari produk',
-          hintText: 'Nama produk',
-          prefixIcon: Icon(Icons.search),
-        ),
-      );
-      final action = constraints.maxWidth < 420
-          ? FilledButton.icon(
-              onPressed: onSearch,
-              icon: const Icon(Icons.search),
-              label: const Text('Cari produk'),
-            )
-          : IconButton.filled(
-              onPressed: onSearch,
-              tooltip: 'Cari produk',
-              icon: const Icon(Icons.arrow_forward),
-            );
-
-      return constraints.maxWidth < 420
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                field,
-                const SizedBox(height: AppSpacing.sm),
-                action,
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: field),
-                const SizedBox(width: AppSpacing.sm),
-                action,
-              ],
-            );
-    },
+  Widget build(BuildContext context) => TextField(
+    controller: controller,
+    onChanged: onChanged,
+    onSubmitted: onSubmitted,
+    textInputAction: TextInputAction.search,
+    decoration: InputDecoration(
+      hintText: 'Cari nama produk',
+      prefixIcon: const Icon(Icons.search),
+      suffixIcon: IconButton(
+        key: const ValueKey('search-products'),
+        onPressed: onSearch,
+        tooltip: 'Cari produk',
+        icon: const Icon(Icons.arrow_forward),
+      ),
+    ),
   );
 }
 
@@ -372,76 +270,42 @@ class _CategoryFilters extends StatelessWidget {
   const _CategoryFilters({
     required this.categories,
     required this.selectedIds,
-    required this.hasActiveFilters,
-    required this.onSelect,
-    required this.onRemove,
-    required this.onReset,
+    required this.onToggle,
+    required this.onShowAll,
   });
 
   final List<ProductCategory> categories;
   final Set<int> selectedIds;
-  final bool hasActiveFilters;
-  final VoidCallback onSelect;
-  final ValueChanged<int> onRemove;
-  final VoidCallback onReset;
+  final ValueChanged<int> onToggle;
+  final VoidCallback onShowAll;
 
   @override
   Widget build(BuildContext context) {
-    final selectedCategories = categories
-        .where((category) => selectedIds.contains(category.id))
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.tune, size: 18, color: AppColors.textMuted),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              'Saring katalog',
-              style: Theme.of(context).textTheme.labelLarge,
+    return SizedBox(
+      key: const ValueKey('filter-categories'),
+      height: 48,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            child: FilterChip(
+              label: const Text('Semua'),
+              selected: selectedIds.isEmpty,
+              onSelected: (_) => onShowAll(),
             ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            OutlinedButton.icon(
-              onPressed: onSelect,
-              label: Text(
-                selectedIds.isEmpty
-                    ? 'Semua kategori'
-                    : '${selectedIds.length} kategori dipilih',
-              ),
-            ),
-            if (hasActiveFilters)
-              TextButton.icon(
-                onPressed: onReset,
-                icon: const Icon(Icons.close, size: 18),
-                label: const Text('Reset filter'),
-              ),
-          ],
-        ),
-        if (selectedCategories.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: [
-              for (final category in selectedCategories)
-                InputChip(
-                  label: Text(category.name),
-                  onDeleted: () => onRemove(category.id),
-                  deleteButtonTooltipMessage: 'Hapus ${category.name}',
-                ),
-            ],
           ),
+          for (final category in categories)
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              child: FilterChip(
+                label: Text(category.name),
+                selected: selectedIds.contains(category.id),
+                onSelected: (_) => onToggle(category.id),
+              ),
+            ),
         ],
-      ],
+      ),
     );
   }
 }
@@ -513,11 +377,11 @@ class _ProductResults extends ConsumerWidget {
           ),
         LayoutBuilder(
           builder: (context, constraints) {
-            const minCardWidth = 260.0;
+            const minCardWidth = 200.0;
             const gap = AppSpacing.lg;
             final columns =
                 (constraints.maxWidth + gap) ~/ (minCardWidth + gap);
-            final columnCount = columns.clamp(1, 3);
+            final columnCount = columns.clamp(1, 4);
             final itemWidth =
                 (constraints.maxWidth - (gap * (columnCount - 1))) /
                 columnCount;
@@ -709,12 +573,12 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               key: ValueKey('quick-add-${product.id}'),
               onTap: canAdd && !isAdding ? _addToCart : null,
               child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     AspectRatio(
-                      aspectRatio: 1.65,
+                      aspectRatio: 2.6,
                       child: Stack(
                         children: [
                           _ProductImage(product: product),
@@ -735,6 +599,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                         category.name,
                         style: Theme.of(context).textTheme.labelMedium
                             ?.copyWith(color: AppColors.warmBrown),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -743,12 +609,12 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    const SizedBox(height: AppSpacing.sm),
+                    const SizedBox(height: AppSpacing.xs),
                     _ProductPrice(product: product),
-                    const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.sm),
                     _StockStatus(product: product),
                     if (canAdd) ...[
-                      const SizedBox(height: AppSpacing.md),
+                      const SizedBox(height: AppSpacing.sm),
                       Row(
                         children: [
                           Icon(
@@ -783,16 +649,22 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
+              AppSpacing.md,
               0,
-              AppSpacing.lg,
-              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.md,
             ),
-            child: OutlinedButton.icon(
-              key: ValueKey('product-detail-${product.id}'),
-              onPressed: () => context.push('/products/${product.id}'),
-              icon: const Icon(Icons.info_outline),
-              label: const Text('Lihat detail'),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox.square(
+                dimension: 48,
+                child: IconButton(
+                  key: ValueKey('product-detail-${product.id}'),
+                  onPressed: () => context.push('/products/${product.id}'),
+                  tooltip: 'Lihat detail ${product.name}',
+                  icon: const Icon(Icons.info_outline),
+                ),
+              ),
             ),
           ),
         ],

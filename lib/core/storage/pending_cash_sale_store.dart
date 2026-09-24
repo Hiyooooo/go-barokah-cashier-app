@@ -31,6 +31,7 @@ class PendingCashSale {
     required this.idempotencyKey,
     required this.cartItemIds,
     required this.cashReceived,
+    this.paymentMethod = 'CASH',
     this.cashierId,
     this.createdAt,
     this.status = 'pending',
@@ -40,6 +41,7 @@ class PendingCashSale {
   final String idempotencyKey;
   final List<int> cartItemIds;
   final num cashReceived;
+  final String paymentMethod;
   final String? cashierId;
   final DateTime? createdAt;
   final String status;
@@ -49,6 +51,7 @@ class PendingCashSale {
     'idempotency_key': idempotencyKey,
     'cart_item_ids': cartItemIds,
     'cash_received': cashReceived,
+    'payment_method': paymentMethod,
     if (cashierId != null) 'cashier_id': cashierId,
     if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
     'status': status,
@@ -62,6 +65,7 @@ class PendingCashSale {
             .map((id) => (id as num).toInt())
             .toList(),
         cashReceived: json['cash_received'] as num,
+        paymentMethod: json['payment_method'] as String? ?? 'CASH',
         cashierId: json['cashier_id'] as String?,
         createdAt: _dateTime(json['created_at']),
         status: json['status'] as String? ?? 'pending',

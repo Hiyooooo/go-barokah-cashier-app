@@ -11,6 +11,7 @@ import '../../../cart/data/models/cart_models.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../../receipt/data/models/receipt_models.dart';
 import '../providers/checkout_provider.dart';
+import '../widgets/snap_payment_modal.dart';
 
 class CheckoutPage extends ConsumerStatefulWidget {
   const CheckoutPage({super.key});
@@ -22,23 +23,38 @@ class CheckoutPage extends ConsumerStatefulWidget {
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   final _cashController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _cashFocusNode = FocusNode();
+  final _submitFocusNode = FocusNode();
+  String _selectedPaymentMethod = 'CASH';
 
   @override
   void dispose() {
     _cashController.dispose();
+    _cashFocusNode.dispose();
+    _submitFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _submit(Cart cart) async {
-    if (!_formKey.currentState!.validate()) return;
+    final isCash = _selectedPaymentMethod == 'CASH';
+    if (isCash && !_formKey.currentState!.validate()) return;
+    final cashAmount = isCash ? num.parse(_cashController.text.trim()) : 0;
+
     await ref
         .read(checkoutProvider.notifier)
         .submit(
           cartItemIds: cart.items.map((item) => item.id).toList(),
-          cashReceived: num.parse(_cashController.text.trim()),
+          cashReceived: cashAmount,
+          paymentMethod: _selectedPaymentMethod,
         );
     if (ref.read(checkoutProvider).valueOrNull != null) {
       ref.invalidate(cartProvider);
+      final saleResult = ref.read(checkoutProvider).valueOrNull!;
+      if (saleResult.status == 'PENDING' &&
+          saleResult.paymentMethod != 'CASH' &&
+          mounted) {
+        SnapPaymentModal.show(context, saleResult);
+      }
     }
   }
 
@@ -47,9 +63,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       '/receipt/${result.saleNumber}',
       extra: Receipt.fromCashSaleJson(result.toJson()),
     );
-    if (mounted) {
-      await ref.read(checkoutProvider.notifier).finalizeSale();
-    }
   }
 
   Future<void> _openPrintPreview(CashSaleResult result) async {
@@ -57,9 +70,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       '/receipt/${result.saleNumber}/print',
       extra: Receipt.fromCashSaleJson(result.toJson()),
     );
-    if (mounted) {
-      await ref.read(checkoutProvider.notifier).finalizeSale();
-    }
   }
 
   Future<void> _startNewSale() async {
@@ -73,7 +83,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final cart = ref.watch(cartProvider);
     final checkout = ref.watch(checkoutProvider);
     final result = checkout.valueOrNull;
-    final body = result != null
+    final body = result != null && result.status == 'COMPLETED'
         ? _CheckoutSuccess(
             result: result,
             onOpenReceipt: _openReceipt,
@@ -96,6 +106,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     checkout: checkout,
                     formKey: _formKey,
                     cashController: _cashController,
+                    cashFocusNode: _cashFocusNode,
+                    submitFocusNode: _submitFocusNode,
+                    selectedPaymentMethod: _selectedPaymentMethod,
+                    onPaymentMethodChanged: (method) {
+                      setState(() => _selectedPaymentMethod = method);
+                    },
                     onSubmit: () => _submit(value),
                   ),
           );
@@ -113,6 +129,10 @@ class _CheckoutContent extends StatelessWidget {
     required this.checkout,
     required this.formKey,
     required this.cashController,
+    required this.cashFocusNode,
+    required this.submitFocusNode,
+    required this.selectedPaymentMethod,
+    required this.onPaymentMethodChanged,
     required this.onSubmit,
   });
 
@@ -120,6 +140,10 @@ class _CheckoutContent extends StatelessWidget {
   final AsyncValue<CashSaleResult?> checkout;
   final GlobalKey<FormState> formKey;
   final TextEditingController cashController;
+  final FocusNode cashFocusNode;
+  final FocusNode submitFocusNode;
+  final String selectedPaymentMethod;
+  final ValueChanged<String> onPaymentMethodChanged;
   final VoidCallback onSubmit;
 
   @override
@@ -130,6 +154,10 @@ class _CheckoutContent extends StatelessWidget {
       checkout: checkout,
       formKey: formKey,
       cashController: cashController,
+      cashFocusNode: cashFocusNode,
+      submitFocusNode: submitFocusNode,
+      selectedPaymentMethod: selectedPaymentMethod,
+      onPaymentMethodChanged: onPaymentMethodChanged,
       isSubmitting: isSubmitting,
       onSubmit: onSubmit,
     );
@@ -253,6 +281,10 @@ class _PaymentPanel extends StatelessWidget {
     required this.checkout,
     required this.formKey,
     required this.cashController,
+    required this.cashFocusNode,
+    required this.submitFocusNode,
+    required this.selectedPaymentMethod,
+    required this.onPaymentMethodChanged,
     required this.isSubmitting,
     required this.onSubmit,
   });
@@ -261,6 +293,10 @@ class _PaymentPanel extends StatelessWidget {
   final AsyncValue<CashSaleResult?> checkout;
   final GlobalKey<FormState> formKey;
   final TextEditingController cashController;
+  final FocusNode cashFocusNode;
+  final FocusNode submitFocusNode;
+  final String selectedPaymentMethod;
+  final ValueChanged<String> onPaymentMethodChanged;
   final bool isSubmitting;
   final VoidCallback onSubmit;
 
@@ -271,17 +307,43 @@ class _PaymentPanel extends StatelessWidget {
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: cashController,
         builder: (context, value, _) {
+          final isCash = selectedPaymentMethod == 'CASH';
           final cash = num.tryParse(value.text.trim());
           final payable = cart.summary.subtotal;
-          final changePreview = cash != null && cash >= payable
+          final changePreview = isCash && cash != null && cash >= payable
               ? cash - payable
               : null;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Pembayaran tunai',
+                'Metode pembayaran',
                 style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SegmentedButton<String>(
+                key: const ValueKey('payment-method-selector'),
+                segments: const [
+                  ButtonSegment<String>(
+                    value: 'CASH',
+                    label: Text('Tunai'),
+                    icon: Icon(Icons.money),
+                  ),
+                  ButtonSegment<String>(
+                    value: 'QRIS',
+                    label: Text('QRIS'),
+                    icon: Icon(Icons.qr_code_2),
+                  ),
+                  ButtonSegment<String>(
+                    value: 'VA',
+                    label: Text('VA Bank'),
+                    icon: Icon(Icons.account_balance),
+                  ),
+                ],
+                selected: {selectedPaymentMethod},
+                onSelectionChanged: (set) {
+                  if (set.isNotEmpty) onPaymentMethodChanged(set.first);
+                },
               ),
               const SizedBox(height: AppSpacing.lg),
               _SummaryRow(label: 'Subtotal', value: formatPrice(payable)),
@@ -296,42 +358,54 @@ class _PaymentPanel extends StatelessWidget {
                 emphasized: true,
               ),
               const SizedBox(height: AppSpacing.xl),
-              Form(
-                key: formKey,
-                child: TextFormField(
-                  controller: cashController,
-                  autofocus: true,
-                  textInputAction: TextInputAction.done,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+              if (isCash) ...[
+                Form(
+                  key: formKey,
+                  child: TextFormField(
+                    key: const ValueKey('cash-received-field'),
+                    controller: cashController,
+                    focusNode: cashFocusNode,
+                    autofocus: true,
+                    textInputAction: TextInputAction.done,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onFieldSubmitted: (_) {
+                      if (!isSubmitting) onSubmit();
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Uang diterima',
+                      hintText: 'Masukkan nominal tunai',
+                      prefixText: 'Rp ',
+                    ),
+                    validator: (value) {
+                      final cash = num.tryParse(value?.trim() ?? '');
+                      if (cash == null || !cash.isFinite || cash < 0) {
+                        return 'Masukkan nominal tunai yang valid.';
+                      }
+                      if (cash < payable) {
+                        return 'Uang diterima kurang dari jumlah pembayaran.';
+                      }
+                      return null;
+                    },
                   ),
-                  onFieldSubmitted: (_) {
-                    if (!isSubmitting) onSubmit();
-                  },
-                  decoration: const InputDecoration(
-                    labelText: 'Uang diterima',
-                    hintText: 'Masukkan nominal tunai',
-                    prefixText: 'Rp ',
-                  ),
-                  validator: (value) {
-                    final cash = num.tryParse(value?.trim() ?? '');
-                    if (cash == null || cash < 0) {
-                      return 'Masukkan nominal tunai yang valid.';
-                    }
-                    if (cash < payable) {
-                      return 'Uang diterima kurang dari jumlah pembayaran.';
-                    }
-                    return null;
-                  },
                 ),
-              ),
-              if (changePreview != null) ...[
-                const SizedBox(height: AppSpacing.md),
+                if (changePreview != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _CheckoutNotice(
+                    icon: Icons.calculate_outlined,
+                    title: 'Estimasi kembalian',
+                    message: formatPrice(changePreview),
+                    color: AppColors.forestGreen,
+                  ),
+                ],
+              ] else ...[
                 _CheckoutNotice(
-                  icon: Icons.calculate_outlined,
-                  title: 'Estimasi kembalian',
-                  message: formatPrice(changePreview),
-                  color: AppColors.forestGreen,
+                  icon: Icons.info_outline,
+                  title: 'Pembayaran Midtrans Snap',
+                  message:
+                      'Tagihan sebesar ${formatPrice(payable)} akan diproses melalui ${selectedPaymentMethod == "QRIS" ? "QRIS" : "Virtual Account Bank"}.',
+                  color: AppColors.warmBrown,
                 ),
               ],
               if (checkout.hasError) ...[
@@ -340,6 +414,8 @@ class _PaymentPanel extends StatelessWidget {
               ],
               const SizedBox(height: AppSpacing.xl),
               FilledButton(
+                key: const ValueKey('submit-cash-sale'),
+                focusNode: submitFocusNode,
                 onPressed: isSubmitting ? null : onSubmit,
                 child: Text(
                   isSubmitting
@@ -545,15 +621,22 @@ class _SummaryRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
+        Expanded(
+          child: Text(
+            label,
+            style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
+          ),
         ),
-        Text(
-          value,
-          style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
+          ),
         ),
       ],
     ),

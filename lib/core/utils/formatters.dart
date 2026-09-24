@@ -1,6 +1,8 @@
 import 'package:intl/intl.dart';
 
-String formatPrice(num value) => 'Rp ${value.toStringAsFixed(0)}';
+final _idr = NumberFormat('#,###', 'id_ID');
+
+String formatPrice(num value) => 'Rp ${_idr.format(value)}';
 
 String formatDateTime(DateTime? value) {
   if (value == null) return '-';

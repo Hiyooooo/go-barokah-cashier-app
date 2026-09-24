@@ -9,6 +9,7 @@ class AuthRepository {
       _storage = storage ?? const FlutterSecureStorage();
 
   static const tokenKey = ApiClient.tokenKey;
+  static const lastEmailKey = 'last_login_email';
 
   final ApiClient _apiClient;
   final FlutterSecureStorage _storage;
@@ -28,6 +29,11 @@ class AuthRepository {
     await _storage.write(key: tokenKey, value: result.token);
     return result;
   }
+
+  Future<String?> readLastEmail() => _storage.read(key: lastEmailKey);
+
+  Future<void> saveLastEmail(String email) =>
+      _storage.write(key: lastEmailKey, value: email.trim());
 
   Future<void> logout() async {
     try {

@@ -10,11 +10,19 @@ class CashSaleRepository {
 
   Future<CashSaleResult> createCashSale({
     required List<int> cartItemIds,
-    required num cashReceived,
+    num cashReceived = 0,
+    String paymentMethod = 'CASH',
     required String idempotencyKey,
   }) => _dataSource.createCashSale(
     cartItemIds: cartItemIds,
     cashReceived: cashReceived,
+    paymentMethod: paymentMethod,
     idempotencyKey: idempotencyKey,
   );
+
+  Future<CashSaleResult> cancelCashSale(String saleNumber) =>
+      _dataSource.cancelCashSale(saleNumber);
+
+  Future<CashSaleResult> getCashSale(String saleNumber) =>
+      _dataSource.getCashSale(saleNumber);
 }

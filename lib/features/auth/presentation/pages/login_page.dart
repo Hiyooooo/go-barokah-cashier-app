@@ -22,6 +22,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   bool _obscurePassword = true;
   bool _isSubmitting = false;
+  bool _emailPrefillLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLastEmail();
+  }
+
+  Future<void> _loadLastEmail() async {
+    try {
+      final lastEmail = await ref.read(authRepositoryProvider).readLastEmail();
+      if (!mounted || _emailPrefillLoaded) return;
+      _emailPrefillLoaded = true;
+      if (lastEmail != null && lastEmail.trim().isNotEmpty) {
+        _emailController.text = lastEmail.trim();
+      }
+    } catch (_) {
+      // Prefill is best-effort; login remains fully usable without it.
+    }
+  }
 
   @override
   void dispose() {
@@ -47,12 +67,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isSubmitting = true);
     try {
+      final email = _emailController.text.trim();
       await ref
           .read(authProvider.notifier)
-          .login(
-            email: _emailController.text.trim(),
-            password: _passwordController.text,
-          );
+          .login(email: email, password: _passwordController.text);
+      if (!mounted || ref.read(authProvider).hasError) return;
+      if (email.isNotEmpty) {
+        await ref.read(authRepositoryProvider).saveLastEmail(email);
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -63,12 +85,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     return email.isNotEmpty && email.contains('@') && email.contains('.');
   }
 
+  bool _isSessionExpired(BuildContext context) {
+    try {
+      return GoRouterState.of(context).uri.queryParameters['reason'] ==
+          'session_expired';
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final sessionExpired =
-        GoRouterState.of(context).uri.queryParameters['reason'] ==
-        'session_expired';
+    final sessionExpired = _isSessionExpired(context);
     final isSubmitting = _isSubmitting || auth.isLoading;
     final errorMessage = auth.hasError
         ? userFacingError(
@@ -82,6 +111,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isTablet = constraints.maxWidth >= 900;
+            // Virtual keyboard in landscape collapses height below ~520dp.
+            // Hiding the brand panel there keeps the CTA scroll-reachable
+            // instead of forcing a RenderFlex overflow.
+            final brandVisible = isTablet && constraints.maxHeight >= 520;
             final form = _LoginFormArea(
               formKey: _formKey,
               emailController: _emailController,
@@ -92,14 +125,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               isSubmitting: isSubmitting,
               sessionExpired: sessionExpired,
               errorMessage: errorMessage,
-              showBrandHeader: !isTablet,
+              showBrandHeader: !brandVisible,
+              showTrustLine: !brandVisible,
               onTogglePassword: () =>
                   setState(() => _obscurePassword = !_obscurePassword),
               onSubmit: _submit,
             );
 
-            if (isTablet) {
+            if (brandVisible) {
               return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Expanded(flex: 5, child: _LoginBrandPanel()),
                   Expanded(flex: 6, child: form),
@@ -127,6 +162,7 @@ class _LoginFormArea extends StatelessWidget {
     required this.sessionExpired,
     required this.errorMessage,
     required this.showBrandHeader,
+    required this.showTrustLine,
     required this.onTogglePassword,
     required this.onSubmit,
   });
@@ -141,6 +177,7 @@ class _LoginFormArea extends StatelessWidget {
   final bool sessionExpired;
   final String? errorMessage;
   final bool showBrandHeader;
+  final bool showTrustLine;
   final VoidCallback onTogglePassword;
   final VoidCallback onSubmit;
 
@@ -159,7 +196,8 @@ class _LoginFormArea extends StatelessWidget {
         horizontalPadding,
         AppSpacing.xxl,
       ),
-      child: Center(
+      child: Align(
+        alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: AutofillGroup(
@@ -167,6 +205,7 @@ class _LoginFormArea extends StatelessWidget {
               key: formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (showBrandHeader) ...[
                     const _LoginBrandHeader(),
@@ -263,6 +302,7 @@ class _LoginFormArea extends StatelessWidget {
                   FilledButton(
                     onPressed: isSubmitting ? null : onSubmit,
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         if (isSubmitting) ...[
@@ -275,14 +315,21 @@ class _LoginFormArea extends StatelessWidget {
                           ),
                           const SizedBox(width: AppSpacing.sm),
                         ],
-                        Text(
-                          isSubmitting ? 'Memproses masuk...' : 'Masuk ke akun',
+                        Flexible(
+                          child: Text(
+                            isSubmitting
+                                ? 'Memproses masuk...'
+                                : 'Masuk ke akun',
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.xxl),
-                  const _LoginTrustLine(),
+                  if (showTrustLine) ...[
+                    const SizedBox(height: AppSpacing.xxl),
+                    const _LoginTrustLine(),
+                  ],
                 ],
               ),
             ),
@@ -306,12 +353,14 @@ class _LoginBrandHeader extends StatelessWidget {
     children: [
       const _LoginBrandMark(size: 48),
       const SizedBox(width: AppSpacing.md),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Go-Barokah', style: Theme.of(context).textTheme.titleLarge),
-          Text('Area kasir', style: Theme.of(context).textTheme.bodySmall),
-        ],
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Go-Barokah', style: Theme.of(context).textTheme.titleLarge),
+            Text('Area kasir', style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
       ),
     ],
   );
@@ -321,44 +370,49 @@ class _LoginBrandPanel extends StatelessWidget {
   const _LoginBrandPanel();
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
+  Widget build(BuildContext context) => const ColoredBox(
     color: AppColors.cream,
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.huge),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 520, maxWidth: 380),
-        child: IntrinsicHeight(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _LoginBrandMark(size: 56),
-              const Spacer(),
-              Text(
-                'Go-Barokah',
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  color: AppColors.forestGreen,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'Katalog, keranjang, dan transaksi tunai dalam satu tempat.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyLarge?.copyWith(color: AppColors.textBody),
-              ),
-              const SizedBox(height: AppSpacing.xxxl),
-              const _LoginTrustLine(),
-              const Spacer(),
-              Text(
-                'Akses khusus untuk akun cashier UD. Barokah.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textBody),
-              ),
-            ],
-          ),
+    child: Padding(
+      padding: EdgeInsets.all(AppSpacing.huge),
+      child: _LoginBrandPanelContent(),
+    ),
+  );
+}
+
+class _LoginBrandPanelContent extends StatelessWidget {
+  const _LoginBrandPanelContent();
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 380),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _LoginBrandMark(size: 56),
+        const Expanded(child: SizedBox.shrink()),
+        Text(
+          'Go-Barokah',
+          style: Theme.of(
+            context,
+          ).textTheme.displayLarge?.copyWith(color: AppColors.forestGreen),
         ),
-      ),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          'Katalog, keranjang, dan transaksi tunai dalam satu tempat.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(color: AppColors.textBody),
+        ),
+        const SizedBox(height: AppSpacing.xxxl),
+        const _LoginTrustLine(),
+        const Expanded(child: SizedBox.shrink()),
+        Text(
+          'Akses khusus untuk akun cashier UD. Barokah.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: AppColors.textBody),
+        ),
+      ],
     ),
   );
 }
