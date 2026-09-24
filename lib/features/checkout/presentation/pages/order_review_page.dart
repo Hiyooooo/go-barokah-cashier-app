@@ -52,7 +52,6 @@ class OrderReviewPage extends ConsumerWidget {
               onRefresh: () => ref.read(cartProvider.notifier).refreshCart(),
               onRetry: () => ref.invalidate(cartProvider),
               onEdit: () => context.go('/cart'),
-              onBrowse: () => context.go('/products'),
               onContinue: () async {
                 await ref.read(checkoutProvider.notifier).resetCompletedSale();
                 if (context.mounted) context.push('/checkout');
@@ -71,7 +70,6 @@ class _OrderReviewContent extends StatelessWidget {
     required this.onRefresh,
     required this.onRetry,
     required this.onEdit,
-    required this.onBrowse,
     required this.onContinue,
   });
 
@@ -82,116 +80,156 @@ class _OrderReviewContent extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final VoidCallback onRetry;
   final VoidCallback onEdit;
-  final VoidCallback onBrowse;
   final VoidCallback onContinue;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final isTablet = constraints.maxWidth >= 800;
-      final review = _CartReviewList(cart: cart);
-      final summary = _CartReviewSummary(cart: cart);
-      final content = isTablet
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: review),
-                const SizedBox(width: AppSpacing.xxl),
-                SizedBox(width: 320, child: summary),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                review,
-                const SizedBox(height: AppSpacing.lg),
-                summary,
-              ],
-            );
-
-      return RefreshIndicator(
+      final continueButton = FilledButton.icon(
+        key: const ValueKey('continue-to-checkout'),
+        onPressed: isUpdating || hasError ? null : onContinue,
+        icon: const Icon(Icons.payments_outlined),
+        label: const Text('Lanjut ke pembayaran'),
+      );
+      final listScroll = RefreshIndicator(
         onRefresh: onRefresh,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
-            AppSpacing.lg,
+            AppSpacing.md,
             AppSpacing.lg,
             AppSpacing.xxxl,
           ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1200),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Pesanan kamu',
-                              style: Theme.of(context).textTheme.headlineMedium,
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            Text(
-                              '${cart.summary.itemsCount} jenis produk · ${cart.summary.totalQuantity} barang',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(color: AppColors.textMuted),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (isUpdating)
-                        const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                    ],
-                  ),
-                  if (hasError) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    _ReviewError(
-                      message: userFacingError(
-                        error!,
-                        fallback: 'Perubahan keranjang belum tersimpan.',
-                      ),
-                      onRetry: onRetry,
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.lg),
-                  content,
-                  const SizedBox(height: AppSpacing.lg),
-                  Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.sm,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: onEdit,
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Ubah keranjang'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: onBrowse,
-                        icon: const Icon(Icons.add_shopping_cart_outlined),
-                        label: const Text('Tambah produk'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  FilledButton.icon(
-                    key: const ValueKey('continue-to-checkout'),
-                    onPressed: isUpdating || hasError ? null : onContinue,
-                    icon: const Icon(Icons.payments_outlined),
-                    label: const Text('Lanjut ke pembayaran tunai'),
-                  ),
-                ],
-              ),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _CartReviewList(cart: cart),
+              if (!isTablet) ...[
+                const SizedBox(height: AppSpacing.lg),
+                _CartReviewSummary(cart: cart),
+              ],
+            ],
           ),
         ),
+      );
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.sm,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Daftar pesanan',
+                            style: Theme.of(context).textTheme.headlineMedium,
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            '${cart.summary.itemsCount} jenis produk · ${cart.summary.totalQuantity} barang',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isUpdating)
+                      const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 40),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                      ),
+                    ),
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Ubah keranjang'),
+                  ),
+                ),
+                if (hasError) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _ReviewError(
+                    message: userFacingError(
+                      error!,
+                      fallback: 'Perubahan keranjang belum tersimpan.',
+                    ),
+                    onRetry: onRetry,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Expanded(
+            child: isTablet
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: listScroll),
+                      const VerticalDivider(width: 1, thickness: 1),
+                      SizedBox(
+                        width: 320,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg,
+                            AppSpacing.md,
+                            AppSpacing.lg,
+                            AppSpacing.lg,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  child: _CartReviewSummary(cart: cart),
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              continueButton,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : listScroll,
+          ),
+          if (!isTablet)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                ),
+                child: continueButton,
+              ),
+            ),
+        ],
       );
     },
   );
@@ -208,7 +246,8 @@ class _CartReviewList extends StatelessWidget {
     children: [
       for (final item in cart.items) ...[
         _CartReviewItem(item: item),
-        if (item != cart.items.last) const SizedBox(height: AppSpacing.sm),
+        if (item != cart.items.last)
+          const Divider(height: AppSpacing.lg, thickness: 1),
       ],
     ],
   );
@@ -230,89 +269,101 @@ class _CartReviewItem extends StatelessWidget {
         ? AppColors.warmBrown
         : AppColors.forestGreen;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              item.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.xs,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  '${item.quantity} × ${formatPrice(item.finalPrice)} per satuan',
-                  style: Theme.of(context).textTheme.bodyMedium,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          '${item.quantity} × ${formatPrice(item.finalPrice)} per satuan',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        if (hasDiscount) ...[
+                          Text(
+                            'Normal ${formatPrice(item.price)}',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                          ),
+                          Text(
+                            'Diskon ${item.discountAmount!.toStringAsFixed(0)}%',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColors.warmBrown),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        Icon(
+                          stockUnavailable
+                              ? Icons.remove_shopping_cart_outlined
+                              : stockLimitReached
+                              ? Icons.warning_amber_outlined
+                              : Icons.inventory_2_outlined,
+                          size: 16,
+                          color: stockColor,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: Text(
+                            stockUnavailable
+                                ? 'Stok habis'
+                                : stockLimitReached
+                                ? 'Stok ${item.stock}. Jumlah mencapai batas stok.'
+                                : 'Stok tersedia: ${item.stock}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(color: stockColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                if (hasDiscount) ...[
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   Text(
-                    'Normal ${formatPrice(item.price)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      decoration: TextDecoration.lineThrough,
+                    'Subtotal item',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  Text(
+                    formatPrice(item.subtotal),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.forestGreen,
                     ),
                   ),
-                  Text(
-                    'Diskon ${item.discountAmount!.toStringAsFixed(0)}%',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: AppColors.warmBrown),
-                  ),
                 ],
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Icon(
-                  stockUnavailable
-                      ? Icons.remove_shopping_cart_outlined
-                      : stockLimitReached
-                      ? Icons.warning_amber_outlined
-                      : Icons.inventory_2_outlined,
-                  size: 18,
-                  color: stockColor,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: Text(
-                    stockUnavailable
-                        ? 'Stok habis'
-                        : stockLimitReached
-                        ? 'Stok ${item.stock}. Jumlah mencapai batas stok.'
-                        : 'Stok tersedia: ${item.stock}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: stockColor),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Subtotal item',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                Text(
-                  formatPrice(item.subtotal),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.forestGreen,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

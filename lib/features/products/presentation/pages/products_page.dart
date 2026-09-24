@@ -517,14 +517,10 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
       final cartState = ref.read(cartProvider);
       final cart = cartState.valueOrNull;
       if (cartState.hasError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              userFacingError(
-                cartState.error!,
-                fallback: 'Produk belum dapat ditambahkan ke keranjang.',
-              ),
-            ),
+        _showCartFeedback(
+          userFacingError(
+            cartState.error!,
+            fallback: 'Produk belum dapat ditambahkan ke keranjang.',
           ),
         );
         return;
@@ -532,18 +528,30 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
       final confirmedQuantity = cart == null
           ? null
           : _quantityForProduct(cart, widget.product.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            confirmedQuantity == null
-                ? '${widget.product.name} belum dapat ditambahkan.'
-                : '${widget.product.name} ditambahkan. Jumlah terkonfirmasi: $confirmedQuantity.',
-          ),
-        ),
+      _showCartFeedback(
+        confirmedQuantity == null
+            ? '${widget.product.name} belum dapat ditambahkan.'
+            : '${widget.product.name} ditambahkan. Jumlah terkonfirmasi: $confirmedQuantity.',
       );
     } finally {
       if (mounted) setState(() => _isAdding = false);
     }
+  }
+
+  void _showCartFeedback(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          // ponytail: lifted above the sticky rail CTA + bottom nav, so
+          // rapid quick-adds never block "Periksa pesanan". Revisit with a
+          // proper toast/banner system only if feedback needs actions.
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        ),
+      );
   }
 
   @override

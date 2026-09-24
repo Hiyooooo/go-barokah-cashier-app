@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -343,14 +344,37 @@ class _StepperButton extends StatelessWidget {
   );
 }
 
-class _CartPanelItemRow extends ConsumerWidget {
+class _CartPanelItemRow extends ConsumerStatefulWidget {
   const _CartPanelItemRow({required this.item, required this.disabled});
 
   final CartItem item;
   final bool disabled;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CartPanelItemRow> createState() => _CartPanelItemRowState();
+}
+
+class _CartPanelItemRowState extends ConsumerState<_CartPanelItemRow> {
+  bool _flashing = false;
+
+  @override
+  void didUpdateWidget(covariant _CartPanelItemRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Backend-confirmed increase only: the provider rebuilds this row with
+    // the fresh cart after every successful mutation.
+    if (widget.item.quantity > oldWidget.item.quantity) {
+      HapticFeedback.lightImpact();
+      setState(() => _flashing = true);
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) setState(() => _flashing = false);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final disabled = widget.disabled;
     final hasStockWarning = item.quantity >= item.stock;
     final stockColor = item.stock == 0
         ? Theme.of(context).colorScheme.error
@@ -358,10 +382,13 @@ class _CartPanelItemRow extends ConsumerWidget {
         ? AppColors.warmBrown
         : AppColors.forestGreen;
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+      decoration: BoxDecoration(
+        color: _flashing ? AppColors.successContainer : Colors.transparent,
+        border: const Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+        borderRadius: BorderRadius.circular(AppRadius.badge),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -377,6 +404,16 @@ class _CartPanelItemRow extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
+              if (_flashing)
+                const Padding(
+                  padding: EdgeInsets.only(right: AppSpacing.sm),
+                  child: Icon(
+                    Icons.check_circle,
+                    key: ValueKey('cart-flash'),
+                    size: 20,
+                    color: AppColors.forestGreen,
+                  ),
+                ),
               IconButton(
                 onPressed: disabled
                     ? null

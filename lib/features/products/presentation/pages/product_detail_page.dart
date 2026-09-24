@@ -84,13 +84,18 @@ class _ProductDetailContentState extends ConsumerState<_ProductDetailContent> {
         return;
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${product.name} ditambahkan. Jumlah di keranjang: $confirmedQuantity.',
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '${product.name} ditambahkan. Jumlah di keranjang: $confirmedQuantity.',
+            ),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
           ),
-        ),
-      );
+        );
     } finally {
       if (mounted) setState(() => _isAdding = false);
     }
