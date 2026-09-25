@@ -27,11 +27,10 @@ class UserProfileNotifier extends AsyncNotifier<UserProfile> {
 
   Future<void> updateProfile({
     required String name,
-    String? phoneNumber,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(
-      () => _repository.updateProfile(name: name, phoneNumber: phoneNumber),
+      () => _repository.updateProfile(name: name),
     );
   }
 }
@@ -45,13 +44,11 @@ class ProfileUpdateNotifier extends AsyncNotifier<void> {
 
   Future<UserProfile> saveProfile({
     required String name,
-    String? phoneNumber,
   }) async {
     state = const AsyncLoading();
     try {
       final profile = await _repository.updateProfile(
         name: name,
-        phoneNumber: phoneNumber,
       );
       state = const AsyncData(null);
       ref.read(userProfileProvider.notifier).state = AsyncData(profile);

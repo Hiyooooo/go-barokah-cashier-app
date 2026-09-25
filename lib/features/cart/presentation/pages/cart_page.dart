@@ -16,62 +16,12 @@ class CartPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(cartProvider);
     final currentCart = cart.valueOrNull;
-    final isTablet = MediaQuery.sizeOf(context).width >= 800;
-    final hasItems = currentCart != null && currentCart.items.isNotEmpty;
-
-    Widget? bottomBar;
-    if (!isTablet && hasItems) {
-      bottomBar = SafeArea(
-        top: false,
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            border: Border(top: BorderSide(color: AppColors.borderSubtle)),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total tagihan',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    Text(
-                      formatPrice(currentCart.summary.subtotal),
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: AppColors.forestGreen,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              FilledButton.icon(
-                key: const ValueKey('review-cart-screen'),
-                onPressed: cart.isLoading || cart.hasError
-                    ? null
-                    : () => context.push('/order-review'),
-                icon: const Icon(Icons.fact_check_outlined),
-                label: const Text('Periksa pesanan'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Keranjang'),
         actions: [
-          if (hasItems)
+          if (currentCart?.items.isNotEmpty == true)
             IconButton(
               onPressed: cart.isLoading
                   ? null
@@ -81,9 +31,8 @@ class CartPage extends ConsumerWidget {
             ),
         ],
       ),
-      bottomNavigationBar: bottomBar,
       body: currentCart != null
-          ? _CartContent(cart: currentCart, cartState: cart, isTablet: isTablet)
+          ? _CartContent(cart: currentCart, cartState: cart)
           : cart.when(
               loading: () => const AppLoading(),
               error: (error, _) => AppError(
@@ -93,11 +42,7 @@ class CartPage extends ConsumerWidget {
                 ),
                 onRetry: () => ref.invalidate(cartProvider),
               ),
-              data: (value) => _CartContent(
-                cart: value,
-                cartState: cart,
-                isTablet: isTablet,
-              ),
+              data: (value) => _CartContent(cart: value, cartState: cart),
             ),
     );
   }
@@ -573,15 +518,10 @@ class _CartPanelItemRowState extends ConsumerState<_CartPanelItemRow> {
 }
 
 class _CartContent extends ConsumerWidget {
-  const _CartContent({
-    required this.cart,
-    required this.cartState,
-    required this.isTablet,
-  });
+  const _CartContent({required this.cart, required this.cartState});
 
   final Cart cart;
   final AsyncValue<Cart> cartState;
-  final bool isTablet;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -589,6 +529,7 @@ class _CartContent extends ConsumerWidget {
       return _EmptyCart(onBrowse: () => context.go('/products'));
     }
 
+    final isTablet = MediaQuery.sizeOf(context).width >= 800;
     final mutationInProgress = cartState.isLoading;
     final notifier = ref.read(cartProvider.notifier);
 
@@ -764,9 +705,34 @@ class _CartContent extends ConsumerWidget {
                 item: item,
                 disabled: notifier.isMutatingProduct(item.productId),
               ),
-              if (item != cart.items.last)
-                const Divider(height: AppSpacing.lg, thickness: 1),
+              const SizedBox(height: AppSpacing.sm),
             ],
+            const SizedBox(height: AppSpacing.md),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Total tagihan',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      formatPrice(cart.summary.subtotal),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AppColors.forestGreen,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            reviewButton,
           ],
         ),
       ),
@@ -787,135 +753,137 @@ class _CartItemTile extends ConsumerWidget {
     final hasDiscount = item.discountAmount != null && item.discountAmount! > 0;
     final stockWarning = item.quantity >= item.stock;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              IconButton(
-                onPressed: isMutating
-                    ? null
-                    : () => _removeCartItem(context, ref, item),
-                tooltip: 'Hapus ${item.name}',
-                icon: const Icon(Icons.delete_outline, size: 20),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: [
-              Text(
-                formatPrice(item.finalPrice),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              if (hasDiscount) ...[
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  formatPrice(item.price),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textMuted,
-                    decoration: TextDecoration.lineThrough,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  'Diskon ${item.discountAmount!.toStringAsFixed(0)}%',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: AppColors.warmBrown),
-                ),
-              ],
-              const Spacer(),
-              Text(
-                'Stok: ${item.stock}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: stockWarning ? AppColors.warmBrown : null,
-                ),
-              ),
-            ],
-          ),
-          if (stockWarning) ...[
-            const SizedBox(height: AppSpacing.xs),
-            _CartNotice(
-              icon: Icons.warning_amber_outlined,
-              message: item.stock == 0
-                  ? 'Produk ini tidak tersedia.'
-                  : 'Jumlah sudah mencapai batas stok.',
-              color: item.stock == 0 ? AppColors.error : AppColors.warmBrown,
-            ),
-          ],
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              SizedBox.square(
-                dimension: 44,
-                child: _StepperButton(
-                  onPressed: isMutating
-                      ? null
-                      : () => _decrementCartItem(context, ref, item),
-                  tooltip: item.quantity == 1
-                      ? 'Hapus ${item.name}'
-                      : 'Kurangi ${item.name}',
-                  icon: Icons.remove,
-                ),
-              ),
-              Semantics(
-                label: 'Jumlah ${item.quantity}',
-                child: SizedBox(
-                  width: 44,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
                   child: Text(
-                    '${item.quantity}',
-                    textAlign: TextAlign.center,
+                    item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-              ),
-              SizedBox.square(
-                dimension: 44,
-                child: _StepperButton(
-                  onPressed: isMutating || item.quantity >= item.stock
+                IconButton(
+                  onPressed: isMutating
                       ? null
-                      : () => notifier.updateItem(
-                          item.productId,
-                          item.quantity + 1,
-                        ),
-                  tooltip: 'Tambah ${item.name}',
-                  icon: Icons.add,
+                      : () => _removeCartItem(context, ref, item),
+                  tooltip: 'Hapus ${item.name}',
+                  icon: const Icon(Icons.delete_outline, size: 20),
                 ),
-              ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  formatPrice(item.finalPrice),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                if (hasDiscount) ...[
                   Text(
-                    'Subtotal',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  Text(
-                    formatPrice(item.subtotal),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.forestGreen,
-                      fontWeight: FontWeight.w700,
+                    formatPrice(item.price),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textMuted,
+                      decoration: TextDecoration.lineThrough,
                     ),
                   ),
+                  Text(
+                    'Diskon ${item.discountAmount!.toStringAsFixed(0)}%',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: AppColors.warmBrown),
+                  ),
                 ],
+                Text(
+                  '· Stok: ${item.stock}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: stockWarning ? AppColors.warmBrown : null,
+                  ),
+                ),
+              ],
+            ),
+            if (stockWarning) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _CartNotice(
+                icon: Icons.warning_amber_outlined,
+                message: item.stock == 0
+                    ? 'Produk ini tidak tersedia.'
+                    : 'Jumlah sudah mencapai batas stok.',
+                color: item.stock == 0 ? AppColors.error : AppColors.warmBrown,
               ),
             ],
-          ),
-        ],
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                SizedBox.square(
+                  dimension: 44,
+                  child: _StepperButton(
+                    onPressed: isMutating
+                        ? null
+                        : () => _decrementCartItem(context, ref, item),
+                    tooltip: item.quantity == 1
+                        ? 'Hapus ${item.name}'
+                        : 'Kurangi ${item.name}',
+                    icon: Icons.remove,
+                  ),
+                ),
+                Semantics(
+                  label: 'Jumlah ${item.quantity}',
+                  child: SizedBox(
+                    width: 44,
+                    child: Text(
+                      '${item.quantity}',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+                SizedBox.square(
+                  dimension: 44,
+                  child: _StepperButton(
+                    onPressed: isMutating || item.quantity >= item.stock
+                        ? null
+                        : () => notifier.updateItem(
+                            item.productId,
+                            item.quantity + 1,
+                          ),
+                    tooltip: 'Tambah ${item.name}',
+                    icon: Icons.add,
+                  ),
+                ),
+                const Spacer(),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Subtotal',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Text(
+                      formatPrice(item.subtotal),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.forestGreen,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

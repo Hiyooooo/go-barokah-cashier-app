@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -18,13 +19,13 @@ class ApiClient {
     : _readToken = tokenReader ?? _readStoredToken {
     _dio =
         Dio(
-            BaseOptions(
-              baseUrl: AppConfig.apiBaseUrl,
-              connectTimeout: const Duration(seconds: 15),
-              receiveTimeout: const Duration(seconds: 15),
-              sendTimeout: const Duration(seconds: 15),
-              headers: const {'Accept': 'application/json'},
-            ),
+      BaseOptions(
+        baseUrl: AppConfig.apiBaseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+        sendTimeout: const Duration(seconds: 10),
+        headers: const {'Accept': 'application/json'},
+      ),
           )
           ..interceptors.add(
             InterceptorsWrapper(
@@ -51,13 +52,26 @@ class ApiClient {
     Options? options,
   }) async {
     try {
-      return await _dio.request<T>(
-        path,
-        data: data,
-        queryParameters: queryParameters,
-        options: (options ?? Options()).copyWith(method: method),
-      );
+      debugPrint('[ApiClient] HTTP $method $path data=$data query=$queryParameters');
+      final response = await _dio
+          .request<T>(
+            path,
+            data: data,
+            queryParameters: queryParameters,
+            options: (options ?? Options()).copyWith(method: method),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw DioException(
+              requestOptions: RequestOptions(path: path),
+              type: DioExceptionType.connectionTimeout,
+              message: 'Koneksi ke server timeout setelah 10 detik.',
+            ),
+          );
+      debugPrint('[ApiClient] HTTP $method $path -> ${response.statusCode}');
+      return response;
     } on DioException catch (error) {
+      debugPrint('[ApiClient] HTTP $method $path DioException: ${error.type} ${error.message} status=${error.response?.statusCode} data=${error.response?.data}');
       final exception = ApiException.fromDio(error);
       if (exception.type == ApiErrorType.unauthorized) {
         await _secureStorage.delete(key: tokenKey);

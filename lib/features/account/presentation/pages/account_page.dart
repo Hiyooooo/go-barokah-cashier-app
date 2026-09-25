@@ -17,20 +17,17 @@ class AccountPage extends ConsumerStatefulWidget {
 class _AccountPageState extends ConsumerState<AccountPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
   bool _editing = false;
 
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
     super.dispose();
   }
 
   void _fillForm(UserProfile profile) {
     if (_editing) return;
     _nameController.text = profile.name;
-    _phoneController.text = profile.phoneNumber ?? '';
   }
 
   Future<void> _save() async {
@@ -41,14 +38,11 @@ class _AccountPageState extends ConsumerState<AccountPage> {
           .read(profileUpdateProvider.notifier)
           .saveProfile(
             name: _nameController.text.trim(),
-            phoneNumber: _phoneController.text.trim().isEmpty
-                ? null
-                : _phoneController.text.trim(),
           );
       if (!mounted) return;
       setState(() => _editing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile berhasil diperbarui.')),
+        const SnackBar(content: Text('Profil berhasil diperbarui.')),
       );
     } catch (_) {
       // Keep the form open so the cashier can correct and retry.
@@ -59,9 +53,9 @@ class _AccountPageState extends ConsumerState<AccountPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Keluar dari aplikasi?'),
+        title: const Text('Keluar dari akun kasir?'),
         content: const Text(
-          'Anda perlu login kembali untuk menggunakan aplikasi.',
+          'Sesi kasir akan diakhiri. Anda perlu login kembali untuk mengakses transaksi.',
         ),
         actions: [
           TextButton(
@@ -69,8 +63,12 @@ class _AccountPageState extends ConsumerState<AccountPage> {
             child: const Text('Batal'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Keluar'),
+            child: const Text('Ya, Keluar'),
           ),
         ],
       ),
@@ -117,7 +115,6 @@ class _AccountPageState extends ConsumerState<AccountPage> {
             editing: _editing,
             formKey: _formKey,
             nameController: _nameController,
-            phoneController: _phoneController,
             update: update,
             isUpdating: isUpdating,
             isLoggingOut: isLoggingOut,
@@ -138,7 +135,6 @@ class _AccountContent extends StatelessWidget {
     required this.editing,
     required this.formKey,
     required this.nameController,
-    required this.phoneController,
     required this.update,
     required this.isUpdating,
     required this.isLoggingOut,
@@ -152,7 +148,6 @@ class _AccountContent extends StatelessWidget {
   final bool editing;
   final GlobalKey<FormState> formKey;
   final TextEditingController nameController;
-  final TextEditingController phoneController;
   final AsyncValue<void> update;
   final bool isUpdating;
   final bool isLoggingOut;
@@ -171,30 +166,32 @@ class _AccountContent extends StatelessWidget {
     ),
     child: Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 900),
+        constraints: const BoxConstraints(maxWidth: 880),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isTablet = constraints.maxWidth >= 720;
-            final identity = _IdentityPanel(profile: profile);
+            final identity = _IdentityPanel(
+              profile: profile,
+              isLoggingOut: isLoggingOut,
+              isUpdating: isUpdating,
+              onLogout: onLogout,
+            );
             final details = _ProfilePanel(
               profile: profile,
               editing: editing,
               formKey: formKey,
               nameController: nameController,
-              phoneController: phoneController,
               update: update,
               isUpdating: isUpdating,
-              isLoggingOut: isLoggingOut,
               onEdit: onEdit,
               onCancel: onCancel,
               onSave: onSave,
-              onLogout: onLogout,
             );
             return isTablet
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(width: 280, child: identity),
+                      SizedBox(width: 320, child: identity),
                       const SizedBox(width: AppSpacing.xxl),
                       Expanded(child: details),
                     ],
@@ -214,39 +211,110 @@ class _AccountContent extends StatelessWidget {
   );
 }
 
-class _IdentityPanel extends StatelessWidget {
-  const _IdentityPanel({required this.profile});
+class _IdentityPanel extends ConsumerWidget {
+  const _IdentityPanel({
+    required this.profile,
+    required this.isLoggingOut,
+    required this.isUpdating,
+    required this.onLogout,
+  });
 
   final UserProfile profile;
+  final bool isLoggingOut;
+  final bool isUpdating;
+  final VoidCallback onLogout;
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context, WidgetRef ref) => Card(
     child: Padding(
       padding: const EdgeInsets.all(AppSpacing.xxl),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CircleAvatar(
-            radius: 32,
-            backgroundColor: AppColors.cream,
-            child: Text(
-              _initials(profile.name),
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(color: AppColors.forestGreen),
-            ),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: AppColors.cream,
+                child: Text(
+                  _initials(profile.name),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AppColors.forestGreen,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.name,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      profile.email,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey.shade600,
+                          ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    _RoleBadge(role: profile.role),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(profile.name, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: AppSpacing.xs),
-          Text(profile.email, style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: AppSpacing.lg),
-          _RoleBadge(role: profile.role),
           const SizedBox(height: AppSpacing.xl),
+          const Divider(),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Status Akun',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
           _VerificationStatus(label: 'Email', verified: profile.emailVerified),
-          _VerificationStatus(
-            label: 'Nomor telepon',
-            verified: profile.phoneNumberVerified,
+          const SizedBox(height: AppSpacing.xl),
+          const Divider(),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Informasi Aplikasi',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          _SystemInfoRow(label: 'Aplikasi', value: 'Go-Barokah POS Kasir'),
+          _SystemInfoRow(label: 'Versi', value: '1.0.0 (Release)'),
+          _SystemInfoRow(label: 'Status Sesi', value: 'Aktif Terhubung'),
+          const SizedBox(height: AppSpacing.xl),
+          // Tombol Logout Bergaya Aksi Destruktif yang Tegas
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            ),
+            onPressed: isLoggingOut || isUpdating ? null : onLogout,
+            icon: isLoggingOut
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.error,
+                    ),
+                  )
+                : const Icon(Icons.logout, color: AppColors.error),
+            label: Text(
+              isLoggingOut ? 'Mengakhiri sesi...' : 'Keluar dari Akun Kasir',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -260,28 +328,22 @@ class _ProfilePanel extends StatelessWidget {
     required this.editing,
     required this.formKey,
     required this.nameController,
-    required this.phoneController,
     required this.update,
     required this.isUpdating,
-    required this.isLoggingOut,
     required this.onEdit,
     required this.onCancel,
     required this.onSave,
-    required this.onLogout,
   });
 
   final UserProfile profile;
   final bool editing;
   final GlobalKey<FormState> formKey;
   final TextEditingController nameController;
-  final TextEditingController phoneController;
   final AsyncValue<void> update;
   final bool isUpdating;
-  final bool isLoggingOut;
   final VoidCallback onEdit;
   final VoidCallback onCancel;
   final VoidCallback onSave;
-  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -290,9 +352,23 @@ class _ProfilePanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Informasi profile',
-            style: Theme.of(context).textTheme.titleLarge,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.sm,
+            children: [
+              Text(
+                'Data Profil Kasir',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              if (!editing)
+                OutlinedButton.icon(
+                  onPressed: isUpdating ? null : onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Ubah profil'),
+                ),
+            ],
           ),
           const SizedBox(height: AppSpacing.lg),
           if (editing)
@@ -303,74 +379,45 @@ class _ProfilePanel extends StatelessWidget {
                 children: [
                   TextFormField(
                     controller: nameController,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'Nama'),
+                    textInputAction: TextInputAction.done,
+                    decoration: const InputDecoration(labelText: 'Nama Lengkap'),
                     validator: (value) =>
                         value == null || value.trim().length < 3
                         ? 'Nama minimal 3 karakter.'
                         : null,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  TextFormField(
-                    controller: phoneController,
-                    keyboardType: TextInputType.phone,
-                    textInputAction: TextInputAction.done,
-                    decoration: const InputDecoration(
-                      labelText: 'Nomor telepon',
-                      hintText: 'Opsional',
-                    ),
-                    validator: (value) {
-                      final phone = value?.trim() ?? '';
-                      if (phone.isNotEmpty &&
-                          !RegExp(r'^[0-9+\-\s]{6,20}$').hasMatch(phone)) {
-                        return 'Masukkan nomor telepon yang valid.';
-                      }
-                      return null;
-                    },
                   ),
                   if (update.hasError) ...[
                     const SizedBox(height: AppSpacing.lg),
                     _ProfileError(error: update.error!),
                   ],
                   const SizedBox(height: AppSpacing.xl),
-                  FilledButton(
-                    onPressed: isUpdating ? null : onSave,
-                    child: Text(
-                      isUpdating ? 'Menyimpan...' : 'Simpan perubahan',
-                    ),
-                  ),
-                  OutlinedButton(
-                    onPressed: isUpdating ? null : onCancel,
-                    child: const Text('Batal'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isUpdating ? null : onCancel,
+                          child: const Text('Batal'),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: isUpdating ? null : onSave,
+                          child: Text(
+                            isUpdating ? 'Menyimpan...' : 'Simpan perubahan',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             )
           else ...[
-            _InfoRow(label: 'Nama', value: profile.name),
-            _InfoRow(label: 'Email', value: profile.email),
-            _InfoRow(label: 'Role', value: profile.role),
-            _InfoRow(label: 'Nomor telepon', value: profile.phoneNumber ?? '-'),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton.icon(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Edit profile'),
-            ),
+            _InfoRow(label: 'Nama Lengkap', value: profile.name),
+            _InfoRow(label: 'Alamat Email', value: profile.email),
+            _InfoRow(label: 'Peran / Hak Akses', value: profile.role.toUpperCase()),
           ],
-          const SizedBox(height: AppSpacing.xxl),
-          const Divider(),
-          const SizedBox(height: AppSpacing.lg),
-          OutlinedButton.icon(
-            onPressed: isLoggingOut || isUpdating ? null : onLogout,
-            icon: isLoggingOut
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.logout),
-            label: Text(isLoggingOut ? 'Keluar...' : 'Keluar dari aplikasi'),
-          ),
         ],
       ),
     ),
@@ -378,7 +425,10 @@ class _ProfilePanel extends StatelessWidget {
 }
 
 class _VerificationStatus extends StatelessWidget {
-  const _VerificationStatus({required this.label, required this.verified});
+  const _VerificationStatus({
+    required this.label,
+    required this.verified,
+  });
 
   final String label;
   final bool verified;
@@ -386,20 +436,38 @@ class _VerificationStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = verified ? AppColors.forestGreen : AppColors.warmBrown;
+    final statusText = verified ? 'Terverifikasi' : 'Belum diverifikasi';
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
             verified ? Icons.verified_outlined : Icons.info_outline,
-            size: 18,
+            size: 16,
             color: color,
           ),
-          const SizedBox(width: AppSpacing.sm),
+          const SizedBox(width: AppSpacing.xs),
           Expanded(
-            child: Text(
-              '$label: ${verified ? 'Terverifikasi' : 'Belum terverifikasi'}',
-              style: TextStyle(color: color),
+            child: Text.rich(
+              TextSpan(
+                text: '$label: ',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                children: [
+                  TextSpan(
+                    text: statusText,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -491,10 +559,58 @@ class _InfoRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 132,
-          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          width: 140,
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey.shade700,
+                ),
+          ),
         ),
-        Expanded(child: Text(value)),
+        Expanded(
+          child: Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SystemInfoRow extends StatelessWidget {
+  const _SystemInfoRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey.shade600,
+                ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade800,
+                ),
+          ),
+        ),
       ],
     ),
   );

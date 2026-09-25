@@ -12,6 +12,5 @@ class UserProfileRepository {
 
   Future<UserProfile> updateProfile({
     required String name,
-    String? phoneNumber,
-  }) => _dataSource.updateProfile(name: name, phoneNumber: phoneNumber);
+  }) => _dataSource.updateProfile(name: name);
 }

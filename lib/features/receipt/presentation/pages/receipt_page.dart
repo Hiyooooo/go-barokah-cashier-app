@@ -117,75 +117,221 @@ class _ReceiptContent extends StatelessWidget {
   final VoidCallback onPreview;
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.fromLTRB(
-      AppSpacing.lg,
-      AppSpacing.xxl,
-      AppSpacing.lg,
-      AppSpacing.xxxl,
-    ),
-    child: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _ReceiptHeader(receipt: receipt),
-            const SizedBox(height: AppSpacing.lg),
-            _ReceiptItems(receipt: receipt),
-            const SizedBox(height: AppSpacing.lg),
-            _ReceiptTotals(receipt: receipt),
-            if (receipt.notes?.isNotEmpty == true) ...[
-              const SizedBox(height: AppSpacing.lg),
-              _ReceiptSection(title: 'Catatan', child: Text(receipt.notes!)),
-            ],
-            if (printMessage != null) ...[
-              const SizedBox(height: AppSpacing.lg),
-              _PrintNotice(message: printMessage!, isError: printFailed),
-            ],
-            const SizedBox(height: AppSpacing.xl),
-            FilledButton.icon(
-              onPressed: onPrint,
-              icon: isPrinting
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.print_outlined),
-              label: Text(
-                isPrinting
-                    ? 'Mencetak...'
-                    : printFailed
-                    ? 'Coba cetak lagi'
-                    : 'Cetak struk',
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTabletLandscape = constraints.maxWidth >= 800;
+
+        if (isTabletLandscape) {
+          return Padding(
+            padding: const EdgeInsets.all(AppSpacing.xxl),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Sisi Kiri: Virtual Receipt Canvas Paper (Scrollable)
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: SingleChildScrollView(
+                        child: _ReceiptPaperCanvas(receipt: receipt),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.xxl),
+                // Sisi Kanan: Panel Aksi Sticky
+                SizedBox(
+                  width: 340,
+                  child: Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.xxl),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Aksi Struk',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Transaksi ${receipt.saleNumber}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          if (printMessage != null) ...[
+                            const SizedBox(height: AppSpacing.lg),
+                            _PrintNotice(
+                              message: printMessage!,
+                              isError: printFailed,
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.xl),
+                          FilledButton.icon(
+                            onPressed: onPrint,
+                            icon: isPrinting
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.print_outlined),
+                            label: Text(
+                              isPrinting
+                                  ? 'Mencetak...'
+                                  : printFailed
+                                  ? 'Coba cetak lagi'
+                                  : 'Cetak struk',
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          OutlinedButton.icon(
+                            onPressed: isPrinting ? null : onPreview,
+                            icon: const Icon(Icons.preview_outlined),
+                            label: const Text('Lihat pratinjau cetak'),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          TextButton.icon(
+                            onPressed: () => context.go('/products'),
+                            icon: const Icon(Icons.storefront_outlined),
+                            label: const Text('Transaksi baru'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Mobile / Tablet Portrait
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.xl,
+            AppSpacing.lg,
+            AppSpacing.xxxl,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ReceiptPaperCanvas(receipt: receipt),
+                  if (printMessage != null) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    _PrintNotice(message: printMessage!, isError: printFailed),
+                  ],
+                  const SizedBox(height: AppSpacing.xl),
+                  FilledButton.icon(
+                    onPressed: onPrint,
+                    icon: isPrinting
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.print_outlined),
+                    label: Text(
+                      isPrinting
+                          ? 'Mencetak...'
+                          : printFailed
+                          ? 'Coba cetak lagi'
+                          : 'Cetak struk',
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  OutlinedButton.icon(
+                    onPressed: isPrinting ? null : onPreview,
+                    icon: const Icon(Icons.preview_outlined),
+                    label: const Text('Lihat pratinjau cetak'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  TextButton.icon(
+                    onPressed: () => context.go('/products'),
+                    icon: const Icon(Icons.storefront_outlined),
+                    label: const Text('Transaksi baru'),
+                  ),
+                ],
               ),
             ),
-            OutlinedButton.icon(
-              onPressed: isPrinting ? null : onPreview,
-              icon: const Icon(Icons.preview_outlined),
-              label: const Text('Lihat pratinjau cetak'),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
+          ),
+        );
+      },
+    );
+  }
 }
 
-class _ReceiptHeader extends StatelessWidget {
-  const _ReceiptHeader({required this.receipt});
+/// Kontainer Kertas Struk Tunggal (Receipt Paper Canvas)
+class _ReceiptPaperCanvas extends StatelessWidget {
+  const _ReceiptPaperCanvas({required this.receipt});
 
   final Receipt receipt;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.xxl),
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.xxl,
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Go-Barokah', style: Theme.of(context).textTheme.headlineMedium),
+          // Header Toko & Transaksi
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  'Go-Barokah',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.5,
+                      ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Struk Pembayaran',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade600,
+                      ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: AppSpacing.lg),
+          const _DashedLine(),
+          const SizedBox(height: AppSpacing.md),
+
+          // Meta Info Transaksi
           _ReceiptMeta(label: 'Nomor transaksi', value: receipt.saleNumber),
           _ReceiptMeta(
             label: 'Tanggal',
@@ -193,37 +339,122 @@ class _ReceiptHeader extends StatelessWidget {
           ),
           _ReceiptMeta(label: 'Kasir', value: _orDash(receipt.cashierName)),
           _ReceiptMeta(
-            label: 'Pembayaran',
+            label: 'Metode Bayar',
             value: receipt.paymentMethod.toUpperCase(),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const _DashedLine(),
+          const SizedBox(height: AppSpacing.md),
+
+          // Daftar Item Belanja
+          Text(
+            'Item Belanja',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (final item in receipt.items) ...[
+            _ReceiptItem(item: item),
+            if (item != receipt.items.last)
+              Divider(
+                height: AppSpacing.md,
+                thickness: 0.5,
+                color: Colors.grey.shade300,
+              ),
+          ],
+          if (receipt.items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: Text('Tidak ada item pada struk.'),
+            ),
+          const SizedBox(height: AppSpacing.md),
+          const _DashedLine(),
+          const SizedBox(height: AppSpacing.md),
+
+          // Ringkasan Pembayaran / Totals
+          _ReceiptRow(label: 'Subtotal', value: receipt.subtotal),
+          if (receipt.discountTotal > 0)
+            _ReceiptRow(label: 'Total Diskon', value: receipt.discountTotal),
+          const Divider(height: AppSpacing.lg, thickness: 1),
+          _ReceiptRow(
+            label: 'Total',
+            value: receipt.grandTotal,
+            emphasized: true,
+          ),
+          if (receipt.paymentMethod.toUpperCase() == 'CASH') ...[
+            _ReceiptRow(label: 'Uang Diterima', value: receipt.cashReceived),
+            _ReceiptRow(label: 'Kembalian', value: receipt.changeAmount),
+          ],
+
+          if (receipt.notes?.isNotEmpty == true) ...[
+            const SizedBox(height: AppSpacing.md),
+            const _DashedLine(),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Catatan:',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              receipt.notes!,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+
+          const SizedBox(height: AppSpacing.lg),
+          const _DashedLine(),
+          const SizedBox(height: AppSpacing.md),
+
+          // Ucapan Terima Kasih
+          Center(
+            child: Text(
+              'Terima kasih atas kunjungan Anda!',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey.shade600,
+                    fontStyle: FontStyle.italic,
+                  ),
+            ),
           ),
         ],
       ),
-    ),
-  );
+    );
+  }
 }
 
-class _ReceiptItems extends StatelessWidget {
-  const _ReceiptItems({required this.receipt});
-
-  final Receipt receipt;
+/// Garis Putus-putus Khas Struk Thermal
+class _DashedLine extends StatelessWidget {
+  const _DashedLine();
 
   @override
-  Widget build(BuildContext context) => _ReceiptSection(
-    title: 'Item belanja',
-    child: Column(
-      children: [
-        for (final item in receipt.items) ...[
-          _ReceiptItem(item: item),
-          if (item != receipt.items.last) const Divider(height: AppSpacing.xxl),
-        ],
-        if (receipt.items.isEmpty)
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text('Tidak ada item pada struk.'),
-          ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final boxWidth = constraints.constrainWidth();
+        const dashWidth = 5.0;
+        const dashHeight = 1.0;
+        const dashSpace = 3.0;
+        final dashCount = (boxWidth / (dashWidth + dashSpace)).floor();
+        return Flex(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          direction: Axis.horizontal,
+          children: List.generate(dashCount, (_) {
+            return SizedBox(
+              width: dashWidth,
+              height: dashHeight,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.4),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
 }
 
 class _ReceiptItem extends StatelessWidget {
@@ -232,77 +463,48 @@ class _ReceiptItem extends StatelessWidget {
   final ReceiptItem item;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(item.productName, style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: AppSpacing.xs),
-      Text(
-        '${item.quantity} x ${formatPrice(item.finalUnitPrice)}',
-        style: Theme.of(context).textTheme.bodyMedium,
-      ),
-      if (item.discountAmount > 0)
-        Text(
-          'Harga normal ${formatPrice(item.unitPrice)}. Diskon ${item.discountAmount}%.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      const SizedBox(height: AppSpacing.xs),
-      Align(
-        alignment: Alignment.centerRight,
-        child: Text(
-          formatPrice(item.subtotal),
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(color: AppColors.forestGreen),
-        ),
-      ),
-    ],
-  );
-}
-
-class _ReceiptTotals extends StatelessWidget {
-  const _ReceiptTotals({required this.receipt});
-
-  final Receipt receipt;
-
-  @override
-  Widget build(BuildContext context) => _ReceiptSection(
-    title: 'Ringkasan pembayaran',
-    child: Column(
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ReceiptRow(label: 'Subtotal', value: receipt.subtotal),
-        _ReceiptRow(label: 'Total diskon', value: receipt.discountTotal),
-        const Divider(height: AppSpacing.xxl),
-        _ReceiptRow(
-          label: 'Total',
-          value: receipt.grandTotal,
-          emphasized: true,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.productName,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${item.quantity} x ${formatPrice(item.finalUnitPrice)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade700,
+                    ),
+              ),
+              if (item.discountAmount > 0)
+                Text(
+                  'Normal ${formatPrice(item.unitPrice)} (Diskon ${item.discountAmount}%)',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                ),
+            ],
+          ),
         ),
-        _ReceiptRow(label: 'Uang diterima', value: receipt.cashReceived),
-        _ReceiptRow(label: 'Kembalian', value: receipt.changeAmount),
+        const SizedBox(width: AppSpacing.md),
+        Text(
+          formatPrice(item.subtotal),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.forestGreen,
+              ),
+        ),
       ],
-    ),
-  );
-}
-
-class _ReceiptSection extends StatelessWidget {
-  const _ReceiptSection({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.xxl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: AppSpacing.lg),
-          child,
-        ],
-      ),
     ),
   );
 }
@@ -315,15 +517,27 @@ class _ReceiptMeta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+    padding: const EdgeInsets.symmetric(vertical: 2),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 132,
-          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          width: 120,
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey.shade700,
+                ),
+          ),
         ),
-        Expanded(child: Text(value)),
+        Expanded(
+          child: Text(
+            value,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
+        ),
       ],
     ),
   );
@@ -342,21 +556,30 @@ class _ReceiptRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+    padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style: emphasized ? Theme.of(context).textTheme.titleMedium : null,
+          style: emphasized
+              ? Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  )
+              : Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey.shade800,
+                  ),
         ),
         Text(
           formatPrice(value),
           style: emphasized
-              ? Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(color: AppColors.forestGreen)
-              : null,
+              ? Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.forestGreen,
+                  )
+              : Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
         ),
       ],
     ),

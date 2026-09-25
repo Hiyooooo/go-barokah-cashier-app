@@ -15,12 +15,11 @@ class UserProfileRemoteDataSource {
 
   Future<UserProfile> updateProfile({
     required String name,
-    String? phoneNumber,
   }) async {
     final response = await _apiClient.request<Map<String, dynamic>>(
       '/api/users',
       method: 'PATCH',
-      data: {'username': name, 'phone_number': phoneNumber},
+      data: {'username': name},
     );
     return UserProfile.fromJson(response.data!['data'] as Map<String, dynamic>);
   }
